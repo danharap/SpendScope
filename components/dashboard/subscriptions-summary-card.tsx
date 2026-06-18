@@ -70,7 +70,7 @@ export function SubscriptionsSummaryCard({
                 </p>
               )}
             </div>
-            <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+            <span className="text-sm font-semibold text-rose-400">
               {formatCurrency(item.total)}
             </span>
           </div>

@@ -302,7 +302,7 @@ export function UploadFlow({
               </Card>
               <CSVPreviewTable rows={previewRows} />
               {parseErrors.length > 0 && (
-                <p className="rounded-xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
+                <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
                   {parseErrors.length} row(s) could not be parsed and will be skipped
                 </p>
               )}

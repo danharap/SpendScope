@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UserNav } from "@/components/layout/user-nav";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { formatMonthLabel } from "@/lib/utils/format";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
@@ -51,7 +52,7 @@ export function DashboardHeader({
   );
 
   return (
-    <header className="sticky top-0 z-20 flex shrink-0 flex-col gap-4 border-b border-border/60 bg-background/85 px-4 py-4 backdrop-blur-md sm:px-6 lg:px-8">
+    <header className="glass-header sticky top-0 z-20 flex shrink-0 flex-col gap-4 border-b border-border/50 px-4 py-4 sm:px-6 lg:px-8">
       <div className="flex items-start gap-3">
         <SidebarTrigger className="-ml-1 mt-0.5" />
         <Separator orientation="vertical" className="hidden h-6 sm:block" />
@@ -106,6 +107,7 @@ export function DashboardHeader({
                 Upload CSV
               </Button>
             )}
+            <ThemeToggle />
             <UserNav />
           </div>
         </div>

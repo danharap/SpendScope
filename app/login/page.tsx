@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PieChart, ShieldCheck } from "lucide-react";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -75,9 +76,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute inset-0 dashboard-gradient" aria-hidden />
-      <Card className="relative w-full max-w-md border-border/60 shadow-xl shadow-slate-200/40">
+    <div className="relative flex min-h-screen items-center justify-center p-4">
+      <div className="absolute inset-0 auth-glow" aria-hidden />
+      <div className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
+      <Card className="card-premium relative w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
             <PieChart className="h-7 w-7" aria-hidden />

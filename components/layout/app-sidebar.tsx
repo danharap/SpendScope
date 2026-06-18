@@ -74,7 +74,7 @@ function NavGroup({
                   className={cn(
                     "rounded-lg transition-colors",
                     isActive &&
-                      "bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary"
+                      "bg-primary/15 font-medium text-primary hover:bg-primary/15 hover:text-primary"
                   )}
                 >
                   <item.icon className="h-4 w-4" />
@@ -111,7 +111,7 @@ export function AppSidebar() {
         <NavGroup label="Account" items={settingsNav} pathname={pathname} />
       </SidebarContent>
       <SidebarFooter className="border-t border-sidebar-border/80 p-4">
-        <div className="flex items-start gap-2 rounded-xl bg-muted/50 p-3">
+        <div className="flex items-start gap-2 rounded-xl border border-border/40 bg-muted/30 p-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
           <div>
             <p className="text-xs font-medium">CSV upload only</p>

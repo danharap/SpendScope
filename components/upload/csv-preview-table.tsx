@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/design/category-badge";
 import { formatCurrency } from "@/lib/utils/format";
 import type { ImportPreviewRow } from "@/types/transaction";
 
@@ -20,10 +20,10 @@ export function CSVPreviewTable({ rows }: CSVPreviewTableProps) {
   const preview = rows.slice(0, 20);
 
   return (
-    <div className="rounded-lg border">
+    <div className="card-premium overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow>
+          <TableRow className="hover:bg-transparent">
             <TableHead>Date</TableHead>
             <TableHead>Merchant</TableHead>
             <TableHead>Description</TableHead>
@@ -35,36 +35,30 @@ export function CSVPreviewTable({ rows }: CSVPreviewTableProps) {
         <TableBody>
           {preview.map((row) => (
             <TableRow key={row.rowIndex}>
-              <TableCell className="whitespace-nowrap">{row.transaction_date}</TableCell>
+              <TableCell className="whitespace-nowrap text-muted-foreground">
+                {row.transaction_date}
+              </TableCell>
               <TableCell className="max-w-[140px] truncate">{row.merchant_name}</TableCell>
               <TableCell className="max-w-[200px] truncate text-muted-foreground">
                 {row.description_raw}
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{row.categoryName ?? "—"}</Badge>
+                <StatusBadge variant="neutral">{row.categoryName ?? "—"}</StatusBadge>
               </TableCell>
               <TableCell
-                className={`text-right font-medium ${row.amount < 0 ? "text-red-600" : "text-emerald-600"}`}
+                className={`text-right font-medium tabular-nums ${row.amount < 0 ? "text-rose-400" : "text-emerald-400"}`}
               >
                 {formatCurrency(row.amount)}
               </TableCell>
               <TableCell>
                 {row.isDuplicate ? (
-                  <Badge variant="outline" className="text-muted-foreground">
-                    Duplicate
-                  </Badge>
+                  <StatusBadge variant="neutral">Duplicate</StatusBadge>
                 ) : row.is_income ? (
-                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                    Income
-                  </Badge>
+                  <StatusBadge variant="income">Income</StatusBadge>
                 ) : row.needs_review ? (
-                  <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">
-                    Review
-                  </Badge>
+                  <StatusBadge variant="review">Review</StatusBadge>
                 ) : (
-                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                    Ready
-                  </Badge>
+                  <StatusBadge variant="success">Ready</StatusBadge>
                 )}
               </TableCell>
             </TableRow>
@@ -72,7 +66,7 @@ export function CSVPreviewTable({ rows }: CSVPreviewTableProps) {
         </TableBody>
       </Table>
       {rows.length > 20 && (
-        <p className="border-t p-3 text-center text-sm text-muted-foreground">
+        <p className="border-t border-border/50 p-3 text-center text-sm text-muted-foreground">
           Showing 20 of {rows.length} rows
         </p>
       )}

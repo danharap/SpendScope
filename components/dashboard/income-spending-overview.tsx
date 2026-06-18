@@ -44,7 +44,7 @@ export function IncomeSpendingOverview({
         <Card
           className={cn(
             "card-premium lg:col-span-2",
-            stats.weeklyOverBudget && "border-rose-200/80 dark:border-rose-900/40"
+            stats.weeklyOverBudget && "border-rose-500/30"
           )}
         >
           <CardHeader className="flex flex-row items-start justify-between pb-2">
@@ -75,8 +75,8 @@ export function IncomeSpendingOverview({
                   className={cn(
                     "text-lg font-semibold",
                     stats.weeklyRemaining >= 0
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-rose-600 dark:text-rose-400"
+                      ? "text-emerald-400"
+                      : "text-rose-400"
                   )}
                 >
                   {formatCurrency(Math.abs(stats.weeklyRemaining))}
@@ -99,8 +99,8 @@ export function IncomeSpendingOverview({
                   className={cn(
                     "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
                     stats.weekOverWeekChange <= 0
-                      ? "bg-emerald-500/10 text-emerald-600"
-                      : "bg-rose-500/10 text-rose-600"
+                      ? "status-success border-0"
+                      : "status-danger border-0"
                   )}
                 >
                   {stats.weekOverWeekChange <= 0 ? (
@@ -125,7 +125,7 @@ export function IncomeSpendingOverview({
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+              <p className="text-3xl font-bold tracking-tight text-emerald-400">
                 {formatCurrency(stats.monthIncome)}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -149,7 +149,7 @@ export function IncomeSpendingOverview({
                     <span className="truncate text-muted-foreground">
                       {d.merchant}
                     </span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                    <span className="font-medium text-emerald-400">
                       +{formatCurrency(d.amount)}
                     </span>
                   </div>
@@ -173,9 +173,7 @@ export function IncomeSpendingOverview({
             <p
               className={cn(
                 "mt-1 text-2xl font-bold",
-                stats.monthNet >= 0
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400"
+                stats.monthNet >= 0 ? "text-emerald-400" : "text-rose-400"
               )}
             >
               {formatCurrency(stats.monthNet)}
@@ -199,7 +197,7 @@ export function IncomeSpendingOverview({
       </div>
 
       {stats.suggestions.length > 0 && (
-        <Card className="card-premium border-primary/15 bg-primary/[0.03]">
+        <Card className="card-premium border-primary/20 bg-primary/5">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base font-semibold">
               <Lightbulb className="h-5 w-5 text-primary" aria-hidden />

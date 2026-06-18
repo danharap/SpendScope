@@ -74,11 +74,9 @@ export function ImportSummaryCard({ summary }: ImportSummaryCardProps) {
           ))}
         </div>
         {summary.errors.length > 0 && (
-          <div className="mt-4 rounded-xl border border-rose-200/80 bg-rose-50/60 p-4 dark:border-rose-900/40 dark:bg-rose-950/20">
-            <p className="text-sm font-medium text-rose-800 dark:text-rose-300">
-              Errors
-            </p>
-            <ul className="mt-2 list-disc pl-5 text-sm text-rose-700 dark:text-rose-400">
+          <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4">
+            <p className="text-sm font-medium text-rose-400">Errors</p>
+            <ul className="mt-2 list-disc pl-5 text-sm text-rose-400/90">
               {summary.errors.slice(0, 5).map((e, i) => (
                 <li key={i}>{e}</li>
               ))}

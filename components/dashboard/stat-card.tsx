@@ -17,10 +17,10 @@ interface StatCardProps {
 }
 
 const variantStyles = {
-  default: "bg-primary/10 text-primary",
-  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  danger: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  default: "bg-primary/15 text-primary",
+  success: "bg-emerald-500/15 text-emerald-400",
+  warning: "bg-amber-500/15 text-amber-400",
+  danger: "bg-rose-500/15 text-rose-400",
 };
 
 export function StatCard({
@@ -58,8 +58,8 @@ export function StatCard({
                   className={cn(
                     "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-medium",
                     trend.positive
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                      ? "status-success border-0"
+                      : "status-danger border-0"
                   )}
                 >
                   {trend.positive ? (

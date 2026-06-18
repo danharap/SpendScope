@@ -14,12 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Moon, Settings, Sun, User } from "lucide-react";
+import { LogOut, Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 export function UserNav() {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { setTheme, resolvedTheme } = useTheme();
   const [email, setEmail] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -30,9 +30,8 @@ export function UserNav() {
       .then(({ data }) => setEmail(data.user?.email ?? null));
   }, []);
 
-  const initials = email
-    ? email.slice(0, 2).toUpperCase()
-    : "SS";
+  const initials = email ? email.slice(0, 2).toUpperCase() : "SS";
+  const isDark = resolvedTheme === "dark";
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -42,9 +41,7 @@ export function UserNav() {
   };
 
   if (!mounted) {
-    return (
-      <div className="h-9 w-9 rounded-full bg-muted animate-pulse" />
-    );
+    return <div className="h-9 w-9 rounded-full bg-muted animate-pulse" />;
   }
 
   return (
@@ -59,7 +56,7 @@ export function UserNav() {
         }
       >
         <Avatar className="h-9 w-9 border border-border/60">
-          <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+          <AvatarFallback className="bg-primary/15 text-xs font-semibold text-primary">
             {initials}
           </AvatarFallback>
         </Avatar>
@@ -78,15 +75,13 @@ export function UserNav() {
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        >
-          {theme === "dark" ? (
+        <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
+          {isDark ? (
             <Sun className="mr-2 h-4 w-4" />
           ) : (
             <Moon className="mr-2 h-4 w-4" />
           )}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
+          {isDark ? "Light mode" : "Dark mode"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">

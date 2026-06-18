@@ -11,14 +11,11 @@ export function CategoryBadge({ name, color, className }: CategoryBadgeProps) {
   return (
     <Badge
       variant="secondary"
-      className={cn(
-        "border-0 font-medium",
-        className
-      )}
+      className={cn("border-0 font-medium bg-secondary/80", className)}
       style={
         color
           ? {
-              backgroundColor: `${color}18`,
+              backgroundColor: `${color}22`,
               color: color,
             }
           : undefined
@@ -41,22 +38,21 @@ export function StatusBadge({
   children,
   className,
 }: {
-  variant: "review" | "subscription" | "transfer" | "income" | "neutral";
+  variant: "review" | "subscription" | "transfer" | "income" | "neutral" | "success";
   children: React.ReactNode;
   className?: string;
 }) {
   const styles = {
-    review: "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400",
-    subscription: "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400",
-    transfer: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-    income: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400",
-    neutral: "bg-muted text-muted-foreground",
+    review: "status-warning border-0",
+    subscription: "border-primary/20 bg-primary/15 text-primary border-0",
+    transfer: "border-0 bg-muted text-muted-foreground",
+    income: "status-success border-0",
+    neutral: "border-0 bg-muted text-muted-foreground",
+    success: "status-success border-0",
   };
 
   return (
-    <Badge
-      className={cn("border-0 font-medium", styles[variant], className)}
-    >
+    <Badge className={cn("font-medium", styles[variant], className)}>
       {children}
     </Badge>
   );

@@ -169,7 +169,7 @@ export function TransactionsTable({
                   key={tx.id}
                   className={cn(
                     "group transition-colors",
-                    tx.needs_review && "bg-amber-50/40 dark:bg-amber-950/10"
+                    tx.needs_review && "bg-amber-500/5"
                   )}
                 >
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
@@ -195,8 +195,8 @@ export function TransactionsTable({
                     className={cn(
                       "text-right font-semibold tabular-nums",
                       isExpense
-                        ? "text-rose-600 dark:text-rose-400"
-                        : "text-emerald-600 dark:text-emerald-400"
+                        ? "text-rose-400"
+                        : "text-emerald-400"
                     )}
                   >
                     {formatCurrency(amount)}
