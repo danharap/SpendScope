@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useTransition } from "react";
+import { useCallback, useMemo, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,19 @@ export function TransactionFilters({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
+  const accountId = searchParams.get("accountId");
+  const categoryId = searchParams.get("categoryId");
+
+  const accountLabel = useMemo(() => {
+    if (!accountId) return "All accounts";
+    return accounts.find((a) => a.id === accountId)?.name ?? "All accounts";
+  }, [accountId, accounts]);
+
+  const categoryLabel = useMemo(() => {
+    if (!categoryId) return "All categories";
+    return categories.find((c) => c.id === categoryId)?.name ?? "All categories";
+  }, [categoryId, categories]);
+
   const updateParams = useCallback(
     (updates: Record<string, string | undefined>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -52,8 +65,8 @@ export function TransactionFilters({
   const hasActiveFilters =
     searchParams.get("startDate") ||
     searchParams.get("endDate") ||
-    searchParams.get("accountId") ||
-    searchParams.get("categoryId") ||
+    accountId ||
+    categoryId ||
     searchParams.get("merchant") ||
     searchParams.get("needsReview") === "true" ||
     searchParams.get("subscriptionsOnly") === "true" ||
@@ -83,7 +96,7 @@ export function TransactionFilters({
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground">Account</Label>
           <Select
-            value={searchParams.get("accountId") ?? "__all__"}
+            value={accountId ?? "__all__"}
             onValueChange={(v) =>
               updateParams({
                 accountId: !v || v === "__all__" ? undefined : v,
@@ -91,12 +104,14 @@ export function TransactionFilters({
             }
           >
             <SelectTrigger className="bg-background">
-              <SelectValue placeholder="All accounts" />
+              <SelectValue placeholder="All accounts">{accountLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All accounts</SelectItem>
+              <SelectItem value="__all__" label="All accounts">
+                All accounts
+              </SelectItem>
               {accounts.map((a) => (
-                <SelectItem key={a.id} value={a.id}>
+                <SelectItem key={a.id} value={a.id} label={a.name}>
                   {a.name}
                 </SelectItem>
               ))}
@@ -106,7 +121,7 @@ export function TransactionFilters({
         <div className="space-y-1.5">
           <Label className="text-xs font-medium text-muted-foreground">Category</Label>
           <Select
-            value={searchParams.get("categoryId") ?? "__all__"}
+            value={categoryId ?? "__all__"}
             onValueChange={(v) =>
               updateParams({
                 categoryId: !v || v === "__all__" ? undefined : v,
@@ -114,12 +129,14 @@ export function TransactionFilters({
             }
           >
             <SelectTrigger className="bg-background">
-              <SelectValue placeholder="All categories" />
+              <SelectValue placeholder="All categories">{categoryLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__all__">All categories</SelectItem>
+              <SelectItem value="__all__" label="All categories">
+                All categories
+              </SelectItem>
               {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
+                <SelectItem key={c.id} value={c.id} label={c.name}>
                   {c.name}
                 </SelectItem>
               ))}

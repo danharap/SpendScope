@@ -15,23 +15,27 @@ export async function getBudgetPreferences(): Promise<BudgetPreferences> {
   const user = await getUser();
   if (!user) return DEFAULT_PREFS;
 
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("profiles")
-    .select(
-      "weekly_spending_limit, hourly_rate, hours_per_week, pay_frequency"
-    )
-    .eq("id", user.id)
-    .maybeSingle();
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select(
+        "weekly_spending_limit, hourly_rate, hours_per_week, pay_frequency"
+      )
+      .eq("id", user.id)
+      .maybeSingle();
 
-  if (!data) return DEFAULT_PREFS;
+    if (error || !data) return DEFAULT_PREFS;
 
-  return {
-    weeklySpendingLimit: Number(data.weekly_spending_limit ?? 200),
-    hourlyRate: Number(data.hourly_rate ?? 30),
-    hoursPerWeek: Number(data.hours_per_week ?? 40),
-    payFrequency: (data.pay_frequency as PayFrequency) ?? "biweekly",
-  };
+    return {
+      weeklySpendingLimit: Number(data.weekly_spending_limit ?? 200),
+      hourlyRate: Number(data.hourly_rate ?? 30),
+      hoursPerWeek: Number(data.hours_per_week ?? 40),
+      payFrequency: (data.pay_frequency as PayFrequency) ?? "biweekly",
+    };
+  } catch {
+    return DEFAULT_PREFS;
+  }
 }
 
 export async function updateBudgetPreferences(prefs: BudgetPreferences) {

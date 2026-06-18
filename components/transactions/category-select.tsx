@@ -22,6 +22,8 @@ export function CategorySelect({
   onChange,
   disabled,
 }: CategorySelectProps) {
+  const selected = categories.find((c) => c.id === value);
+
   return (
     <Select
       value={value ?? undefined}
@@ -29,15 +31,18 @@ export function CategorySelect({
       disabled={disabled}
     >
       <SelectTrigger className="w-[160px]">
-        <SelectValue placeholder="Category" />
+        <SelectValue placeholder="Category">
+          {selected ? selected.name : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {categories.map((c) => (
-          <SelectItem key={c.id} value={c.id}>
+          <SelectItem key={c.id} value={c.id} label={c.name}>
             <span className="flex items-center gap-2">
               <span
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: c.color }}
+                aria-hidden
               />
               {c.name}
             </span>

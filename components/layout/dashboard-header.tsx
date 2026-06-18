@@ -16,7 +16,7 @@ import { UserNav } from "@/components/layout/user-nav";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { formatMonthLabel } from "@/lib/utils/format";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { Suspense, useCallback, useMemo } from "react";
 import { Upload, ShieldCheck } from "lucide-react";
 
 interface DashboardHeaderProps {
@@ -29,7 +29,26 @@ interface DashboardHeaderProps {
   badge?: string;
 }
 
-export function DashboardHeader({
+export function DashboardHeader(props: DashboardHeaderProps) {
+  return (
+    <Suspense fallback={<DashboardHeaderFallback title={props.title} />}>
+      <DashboardHeaderInner {...props} />
+    </Suspense>
+  );
+}
+
+function DashboardHeaderFallback({ title }: { title: string }) {
+  return (
+    <header className="glass-header sticky top-0 z-20 border-b border-border/50 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="flex items-center gap-3">
+        <SidebarTrigger className="-ml-1" />
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+      </div>
+    </header>
+  );
+}
+
+function DashboardHeaderInner({
   title,
   description,
   showMonthSelector = true,
@@ -41,6 +60,10 @@ export function DashboardHeader({
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentMonth = searchParams.get("month") ?? months[months.length - 1] ?? "";
+  const monthLabel = useMemo(
+    () => (currentMonth ? formatMonthLabel(currentMonth) : "Select month"),
+    [currentMonth]
+  );
 
   const onMonthChange = useCallback(
     (month: string) => {
@@ -90,11 +113,11 @@ export function DashboardHeader({
                 onValueChange={(v) => v && onMonthChange(v)}
               >
                 <SelectTrigger className="w-[180px] bg-card">
-                  <SelectValue placeholder="Select month" />
+                  <SelectValue placeholder="Select month">{monthLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {[...months].reverse().map((m) => (
-                    <SelectItem key={m} value={m}>
+                    <SelectItem key={m} value={m} label={formatMonthLabel(m)}>
                       {formatMonthLabel(m)}
                     </SelectItem>
                   ))}

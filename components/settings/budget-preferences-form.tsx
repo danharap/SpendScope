@@ -19,6 +19,12 @@ import { formatCurrency } from "@/lib/utils/format";
 import { toast } from "sonner";
 import { Target } from "lucide-react";
 
+const PAY_FREQUENCY_LABELS: Record<PayFrequency, string> = {
+  weekly: "Weekly",
+  biweekly: "Bi-weekly",
+  monthly: "Monthly",
+};
+
 interface BudgetPreferencesFormProps {
   initial: BudgetPreferences;
 }
@@ -118,12 +124,20 @@ export function BudgetPreferencesForm({ initial }: BudgetPreferencesFormProps) {
               }
             >
               <SelectTrigger className="bg-background">
-                <SelectValue />
+                <SelectValue placeholder="Pay frequency">
+                  {PAY_FREQUENCY_LABELS[prefs.payFrequency]}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="weekly">Weekly</SelectItem>
-                <SelectItem value="biweekly">Bi-weekly</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="weekly" label="Weekly">
+                  Weekly
+                </SelectItem>
+                <SelectItem value="biweekly" label="Bi-weekly">
+                  Bi-weekly
+                </SelectItem>
+                <SelectItem value="monthly" label="Monthly">
+                  Monthly
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>

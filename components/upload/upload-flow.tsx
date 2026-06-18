@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CSVUploader } from "@/components/upload/csv-uploader";
@@ -74,6 +74,13 @@ export function UploadFlow({
   const [detectedRbc, setDetectedRbc] = useState(false);
 
   const dedupeSet = new Set(existingDedupeKeys);
+
+  const accountPresetLabel = useMemo(
+    () => ACCOUNT_PRESETS[Number(accountPreset)]?.name ?? "Select account",
+    [accountPreset]
+  );
+  const accountTypeLabel =
+    accountTypeFilter === "credit_card" ? "Credit card" : "Bank account";
 
   const currentImportStep: ImportStep =
     step === "upload"
@@ -245,11 +252,13 @@ export function UploadFlow({
                       onValueChange={(v) => setAccountPreset(v ?? "0")}
                     >
                       <SelectTrigger className="bg-background">
-                        <SelectValue />
+                        <SelectValue placeholder="Select account">
+                          {accountPresetLabel}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {ACCOUNT_PRESETS.map((a, i) => (
-                          <SelectItem key={a.name} value={String(i)}>
+                          <SelectItem key={a.name} value={String(i)} label={a.name}>
                             {a.name}
                           </SelectItem>
                         ))}
@@ -265,11 +274,17 @@ export function UploadFlow({
                       }
                     >
                       <SelectTrigger className="bg-background">
-                        <SelectValue />
+                        <SelectValue placeholder="Select type">
+                          {accountTypeLabel}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="bank">Bank account</SelectItem>
-                        <SelectItem value="credit_card">Credit card</SelectItem>
+                        <SelectItem value="bank" label="Bank account">
+                          Bank account
+                        </SelectItem>
+                        <SelectItem value="credit_card" label="Credit card">
+                          Credit card
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

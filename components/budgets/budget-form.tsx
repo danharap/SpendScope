@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +25,11 @@ export function BudgetForm({ categories, month }: BudgetFormProps) {
   const [categoryId, setCategoryId] = useState("");
   const [limit, setLimit] = useState("");
   const [pending, startTransition] = useTransition();
+
+  const selectedCategory = useMemo(
+    () => categories.find((c) => c.id === categoryId),
+    [categories, categoryId]
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,15 +59,17 @@ export function BudgetForm({ categories, month }: BudgetFormProps) {
           <div className="flex-1 space-y-2">
             <Label>Category</Label>
             <Select
-              value={categoryId}
+              value={categoryId || undefined}
               onValueChange={(v) => setCategoryId(v ?? "")}
             >
               <SelectTrigger className="bg-background">
-                <SelectValue placeholder="Select category" />
+                <SelectValue placeholder="Select category">
+                  {selectedCategory?.name}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
+                  <SelectItem key={c.id} value={c.id} label={c.name}>
                     {c.name}
                   </SelectItem>
                 ))}

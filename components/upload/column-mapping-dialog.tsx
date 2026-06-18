@@ -95,12 +95,16 @@ export function ColumnMappingDialog({
                 }
               >
                 <SelectTrigger id={field}>
-                  <SelectValue placeholder="Select column" />
+                  <SelectValue placeholder="Select column">
+                    {mapping[field] ?? "— Not mapped —"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">— Not mapped —</SelectItem>
+                  <SelectItem value="__none__" label="— Not mapped —">
+                    — Not mapped —
+                  </SelectItem>
                   {headers.map((h) => (
-                    <SelectItem key={h} value={h}>
+                    <SelectItem key={h} value={h} label={h}>
                       {h}
                     </SelectItem>
                   ))}

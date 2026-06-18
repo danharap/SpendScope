@@ -73,6 +73,16 @@ export function ImportSummaryCard({ summary }: ImportSummaryCardProps) {
             </motion.div>
           ))}
         </div>
+        {summary.needsReview > 0 && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Needs review</span> means
+            SpendScope could not confidently assign a category to those transactions
+            (unknown merchants or ambiguous descriptions). They were imported and
+            placed in &ldquo;Needs Review&rdquo; — open{" "}
+            <span className="font-medium text-foreground">Transactions</span>, use the
+            &ldquo;Needs review&rdquo; filter, and pick the correct category for each.
+          </p>
+        )}
         {summary.errors.length > 0 && (
           <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/10 p-4">
             <p className="text-sm font-medium text-rose-400">Errors</p>

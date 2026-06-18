@@ -2,6 +2,7 @@
 
 import { createClient, getUser } from "@/lib/supabase/server";
 import type { NormalizedTransaction } from "@/types/transaction";
+import type { TransactionWithRelations } from "@/types/database";
 import { revalidatePath } from "next/cache";
 import { normalizeDescription } from "@/lib/csv/dedupe";
 
@@ -272,34 +273,61 @@ export async function getTransactions(filters?: {
   isIncome?: boolean;
   subscriptionsOnly?: boolean;
   limit?: number;
-}) {
+}): Promise<TransactionWithRelations[]> {
   const user = await getUser();
   if (!user) return [];
 
   const supabase = await createClient();
-  let query = supabase
-    .from("transactions")
-    .select("*, accounts(*), categories(*)")
-    .eq("user_id", user.id)
-    .order("transaction_date", { ascending: false });
+  const pageSize = 1000;
 
-  if (filters?.startDate) query = query.gte("transaction_date", filters.startDate);
-  if (filters?.endDate) query = query.lte("transaction_date", filters.endDate);
-  if (filters?.accountId) query = query.eq("account_id", filters.accountId);
-  if (filters?.categoryId) query = query.eq("category_id", filters.categoryId);
-  if (filters?.merchant)
-    query = query.ilike("merchant_name", `%${filters.merchant}%`);
-  if (filters?.minAmount !== undefined)
-    query = query.gte("amount", filters.minAmount);
-  if (filters?.maxAmount !== undefined)
-    query = query.lte("amount", filters.maxAmount);
-  if (filters?.needsReview) query = query.eq("needs_review", true);
-  if (filters?.isIncome !== undefined)
-    query = query.eq("is_income", filters.isIncome);
-  if (filters?.subscriptionsOnly)
-    query = query.eq("is_subscription", true);
-  if (filters?.limit) query = query.limit(filters.limit);
+  const applyFilters = (
+    query: ReturnType<typeof supabase.from>
+  ) => {
+    let q = query
+      .select("*, accounts(*), categories(*)")
+      .eq("user_id", user.id)
+      .order("transaction_date", { ascending: false });
 
-  const { data } = await query;
-  return data ?? [];
+    if (filters?.startDate) q = q.gte("transaction_date", filters.startDate);
+    if (filters?.endDate) q = q.lte("transaction_date", filters.endDate);
+    if (filters?.accountId) q = q.eq("account_id", filters.accountId);
+    if (filters?.categoryId) q = q.eq("category_id", filters.categoryId);
+    if (filters?.merchant)
+      q = q.ilike("merchant_name", `%${filters.merchant}%`);
+    if (filters?.minAmount !== undefined)
+      q = q.gte("amount", filters.minAmount);
+    if (filters?.maxAmount !== undefined)
+      q = q.lte("amount", filters.maxAmount);
+    if (filters?.needsReview) q = q.eq("needs_review", true);
+    if (filters?.isIncome !== undefined)
+      q = q.eq("is_income", filters.isIncome);
+    if (filters?.subscriptionsOnly) q = q.eq("is_subscription", true);
+    return q;
+  };
+
+  if (filters?.limit) {
+    const { data, error } = await applyFilters(
+      supabase.from("transactions")
+    ).limit(filters.limit);
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  }
+
+  const all: TransactionWithRelations[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await applyFilters(
+      supabase.from("transactions")
+    ).range(from, from + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+    if (!data?.length) break;
+
+    all.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
 }
