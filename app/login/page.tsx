@@ -34,13 +34,14 @@ export default function LoginPage() {
       password,
     });
     if (error) {
-      if (error.message.toLowerCase().includes("invalid login")) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes("email not confirmed")) {
         toast.error(
-          "Invalid email or password. If you just signed up, check your email to confirm your account, or use Forgot password."
+          "Please confirm your email first — check your inbox (and spam) for the Supabase confirmation link."
         );
-      } else if (error.message.toLowerCase().includes("email not confirmed")) {
+      } else if (msg.includes("invalid login") || msg.includes("invalid credentials")) {
         toast.error(
-          "Please confirm your email first — check your inbox for the Supabase confirmation link."
+          "Wrong email or password. Use Forgot password to reset, or sign up again if this is a new account."
         );
       } else {
         toast.error(error.message);
