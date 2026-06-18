@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/design/page-container";
 import { EmptyState } from "@/components/design/empty-state";
 import { SectionHeader } from "@/components/design/section-header";
 import { getCategories } from "@/lib/actions/accounts";
-import { getTransactions } from "@/lib/actions/transactions";
+import { getTransactionsForAnalytics } from "@/lib/actions/transactions";
 import { getBudgetPreferences } from "@/lib/actions/settings";
 import {
   computeDashboardStats,
@@ -19,16 +19,19 @@ import {
 } from "@/lib/analytics/income-budget";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Lightbulb } from "lucide-react";
-import type { TransactionWithRelations } from "@/types/database";
+
+export const maxDuration = 60;
 
 interface InsightsPageProps {
   searchParams: Promise<{ month?: string }>;
 }
 
 async function InsightsContent({ month }: { month: string }) {
-  const categories = await getCategories();
-  const transactions = (await getTransactions()) as TransactionWithRelations[];
-  const budgetPrefs = await getBudgetPreferences();
+  const [categories, transactions, budgetPrefs] = await Promise.all([
+    getCategories(),
+    getTransactionsForAnalytics(),
+    getBudgetPreferences(),
+  ]);
   const stats = computeDashboardStats(transactions, categories, month, 0);
   const insights = generateInsights(transactions, categories, month);
   const incomeStats = computeIncomeSpendingStats(

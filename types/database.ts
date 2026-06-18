@@ -90,6 +90,21 @@ export interface TransactionWithRelations extends Transaction {
   categories?: Category | null;
 }
 
+/** Slim row for dashboard analytics — no joined relations */
+export type TransactionAnalyticsRow = Pick<
+  Transaction,
+  | "id"
+  | "transaction_date"
+  | "amount"
+  | "category_id"
+  | "merchant_name"
+  | "description_raw"
+  | "is_income"
+  | "is_transfer"
+  | "is_subscription"
+  | "needs_review"
+>;
+
 export interface BudgetWithSpending extends Budget {
   categories?: Category | null;
   spent: number;

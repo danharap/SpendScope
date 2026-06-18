@@ -1,4 +1,7 @@
-import type { Category, TransactionWithRelations } from "@/types/database";
+import type {
+  Category,
+  TransactionAnalyticsRow,
+} from "@/types/database";
 import {
   getCurrentMonth,
   getMonthRange,
@@ -22,20 +25,19 @@ export interface DashboardStats {
   spendingByCategory: { name: string; total: number; color: string }[];
   monthlySpending: { month: string; total: number }[];
   foodTrend: { month: string; total: number }[];
-  recentTransactions: TransactionWithRelations[];
   subscriptionItems: { name: string; total: number; count: number }[];
 }
 
-function isSpending(tx: TransactionWithRelations): boolean {
+function isSpending(tx: TransactionAnalyticsRow): boolean {
   return !tx.is_income && !tx.is_transfer && Number(tx.amount) < 0;
 }
 
-function spendingAmount(tx: TransactionWithRelations): number {
+function spendingAmount(tx: TransactionAnalyticsRow): number {
   return Math.abs(Number(tx.amount));
 }
 
 export function computeDashboardStats(
-  transactions: TransactionWithRelations[],
+  transactions: TransactionAnalyticsRow[],
   categories: Category[],
   month: string,
   budgetRemaining: number
@@ -161,7 +163,6 @@ export function computeDashboardStats(
     spendingByCategory,
     monthlySpending: monthlySpending,
     foodTrend: foodTrendData,
-    recentTransactions: thisMonth.slice(0, 10),
     subscriptionItems,
   };
 }
@@ -182,7 +183,7 @@ export interface Insight {
 }
 
 export function generateInsights(
-  transactions: TransactionWithRelations[],
+  transactions: TransactionAnalyticsRow[],
   categories: Category[],
   month: string
 ): Insight[] {
@@ -210,7 +211,7 @@ export function generateInsights(
       t.transaction_date <= prevEnd
   );
 
-  const sumByCategory = (txs: TransactionWithRelations[], catName: string) =>
+  const sumByCategory = (txs: TransactionAnalyticsRow[], catName: string) =>
     txs
       .filter((t) => categoryMap.get(t.category_id ?? "")?.name === catName)
       .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);

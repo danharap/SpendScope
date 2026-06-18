@@ -2,11 +2,126 @@
 
 import { createClient, getUser } from "@/lib/supabase/server";
 import type { NormalizedTransaction } from "@/types/transaction";
-import type { TransactionWithRelations } from "@/types/database";
+import type { TransactionWithRelations, TransactionAnalyticsRow } from "@/types/database";
+import { getMonthRange } from "@/lib/utils/format";
 import { revalidatePath } from "next/cache";
 import { normalizeDescription } from "@/lib/csv/dedupe";
 
 const DEDUPE_CHUNK_SIZE = 200;
+const PAGE_SIZE = 1000;
+
+const ANALYTICS_COLUMNS =
+  "id, transaction_date, amount, category_id, merchant_name, description_raw, is_income, is_transfer, is_subscription, needs_review";
+
+const RELATION_COLUMNS = "*, accounts(*), categories(*)";
+
+type TransactionFilters = {
+  startDate?: string;
+  endDate?: string;
+  accountId?: string;
+  categoryId?: string;
+  merchant?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  needsReview?: boolean;
+  isIncome?: boolean;
+  subscriptionsOnly?: boolean;
+  limit?: number;
+};
+
+function applyTransactionFilters<T extends ReturnType<
+  Awaited<ReturnType<typeof createClient>>["from"]
+>>(
+  query: T,
+  userId: string,
+  select: string,
+  filters?: TransactionFilters
+) {
+  let q = query
+    .select(select)
+    .eq("user_id", userId)
+    .order("transaction_date", { ascending: false });
+
+  if (filters?.startDate) q = q.gte("transaction_date", filters.startDate);
+  if (filters?.endDate) q = q.lte("transaction_date", filters.endDate);
+  if (filters?.accountId) q = q.eq("account_id", filters.accountId);
+  if (filters?.categoryId) q = q.eq("category_id", filters.categoryId);
+  if (filters?.merchant)
+    q = q.ilike("merchant_name", `%${filters.merchant}%`);
+  if (filters?.minAmount !== undefined)
+    q = q.gte("amount", filters.minAmount);
+  if (filters?.maxAmount !== undefined)
+    q = q.lte("amount", filters.maxAmount);
+  if (filters?.needsReview) q = q.eq("needs_review", true);
+  if (filters?.isIncome !== undefined)
+    q = q.eq("is_income", filters.isIncome);
+  if (filters?.subscriptionsOnly) q = q.eq("is_subscription", true);
+  return q;
+}
+
+async function fetchAllTransactionPages<T>(
+  userId: string,
+  select: string,
+  filters?: TransactionFilters
+): Promise<T[]> {
+  const supabase = await createClient();
+
+  if (filters?.limit) {
+    const { data, error } = await applyTransactionFilters(
+      supabase.from("transactions"),
+      userId,
+      select,
+      filters
+    ).limit(filters.limit);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as T[];
+  }
+
+  const { count, error: countError } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (countError) throw new Error(countError.message);
+  if (!count) return [];
+
+  const pageCount = Math.ceil(count / PAGE_SIZE);
+  const pages = await Promise.all(
+    Array.from({ length: pageCount }, (_, pageIndex) => {
+      const from = pageIndex * PAGE_SIZE;
+      return applyTransactionFilters(
+        supabase.from("transactions"),
+        userId,
+        select,
+        filters
+      ).range(from, from + PAGE_SIZE - 1);
+    })
+  );
+
+  const all: T[] = [];
+  for (const { data, error } of pages) {
+    if (error) throw new Error(error.message);
+    if (data?.length) all.push(...(data as T[]));
+  }
+  return all;
+}
+
+export async function getTransactionsForAnalytics(): Promise<
+  TransactionAnalyticsRow[]
+> {
+  const user = await getUser();
+  if (!user) return [];
+
+  return fetchAllTransactionPages<TransactionAnalyticsRow>(
+    user.id,
+    ANALYTICS_COLUMNS
+  );
+}
+
+export async function getDistinctTransactionMonths(): Promise<string[]> {
+  const rows = await getTransactionsForAnalytics();
+  return [...new Set(rows.map((t) => t.transaction_date.slice(0, 7)))].sort();
+}
 
 async function fetchExistingDedupeKeys(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -261,73 +376,23 @@ export async function createMerchantRuleFromTransaction(
   return { success: true };
 }
 
-export async function getTransactions(filters?: {
-  startDate?: string;
-  endDate?: string;
-  accountId?: string;
-  categoryId?: string;
-  merchant?: string;
-  minAmount?: number;
-  maxAmount?: number;
-  needsReview?: boolean;
-  isIncome?: boolean;
-  subscriptionsOnly?: boolean;
-  limit?: number;
-}): Promise<TransactionWithRelations[]> {
+export async function getTransactions(
+  filters?: TransactionFilters
+): Promise<TransactionWithRelations[]> {
   const user = await getUser();
   if (!user) return [];
 
-  const supabase = await createClient();
-  const pageSize = 1000;
+  return fetchAllTransactionPages<TransactionWithRelations>(
+    user.id,
+    RELATION_COLUMNS,
+    filters
+  );
+}
 
-  const applyFilters = (
-    query: ReturnType<typeof supabase.from>
-  ) => {
-    let q = query
-      .select("*, accounts(*), categories(*)")
-      .eq("user_id", user.id)
-      .order("transaction_date", { ascending: false });
-
-    if (filters?.startDate) q = q.gte("transaction_date", filters.startDate);
-    if (filters?.endDate) q = q.lte("transaction_date", filters.endDate);
-    if (filters?.accountId) q = q.eq("account_id", filters.accountId);
-    if (filters?.categoryId) q = q.eq("category_id", filters.categoryId);
-    if (filters?.merchant)
-      q = q.ilike("merchant_name", `%${filters.merchant}%`);
-    if (filters?.minAmount !== undefined)
-      q = q.gte("amount", filters.minAmount);
-    if (filters?.maxAmount !== undefined)
-      q = q.lte("amount", filters.maxAmount);
-    if (filters?.needsReview) q = q.eq("needs_review", true);
-    if (filters?.isIncome !== undefined)
-      q = q.eq("is_income", filters.isIncome);
-    if (filters?.subscriptionsOnly) q = q.eq("is_subscription", true);
-    return q;
-  };
-
-  if (filters?.limit) {
-    const { data, error } = await applyFilters(
-      supabase.from("transactions")
-    ).limit(filters.limit);
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  }
-
-  const all: TransactionWithRelations[] = [];
-  let from = 0;
-
-  while (true) {
-    const { data, error } = await applyFilters(
-      supabase.from("transactions")
-    ).range(from, from + pageSize - 1);
-
-    if (error) throw new Error(error.message);
-    if (!data?.length) break;
-
-    all.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-
-  return all;
+export async function getRecentTransactions(
+  month: string,
+  limit = 10
+): Promise<TransactionWithRelations[]> {
+  const { start, end } = getMonthRange(month);
+  return getTransactions({ startDate: start, endDate: end, limit });
 }

@@ -1,4 +1,4 @@
-import type { TransactionWithRelations } from "@/types/database";
+import type { TransactionAnalyticsRow } from "@/types/database";
 import { format, startOfWeek, endOfWeek, subWeeks } from "date-fns";
 
 export type PayFrequency = "weekly" | "biweekly" | "monthly";
@@ -27,11 +27,11 @@ export interface IncomeSpendingStats {
   suggestions: string[];
 }
 
-function isCasualSpending(tx: TransactionWithRelations): boolean {
+function isCasualSpending(tx: TransactionAnalyticsRow): boolean {
   return !tx.is_income && !tx.is_transfer && Number(tx.amount) < 0;
 }
 
-function spendingAmount(tx: TransactionWithRelations): number {
+function spendingAmount(tx: TransactionAnalyticsRow): number {
   return Math.abs(Number(tx.amount));
 }
 
@@ -69,7 +69,7 @@ export function estimateNetPayPerPeriod(prefs: BudgetPreferences): number {
 }
 
 export function computeIncomeSpendingStats(
-  transactions: TransactionWithRelations[],
+  transactions: TransactionAnalyticsRow[],
   month: string,
   prefs: BudgetPreferences
 ): IncomeSpendingStats {

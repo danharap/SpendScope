@@ -26,7 +26,10 @@ import {
   Store,
 } from "lucide-react";
 import { getCategories } from "@/lib/actions/accounts";
-import { getTransactions } from "@/lib/actions/transactions";
+import {
+  getRecentTransactions,
+  getTransactionsForAnalytics,
+} from "@/lib/actions/transactions";
 import { getBudgets } from "@/lib/actions/budgets";
 import { getBudgetPreferences } from "@/lib/actions/settings";
 import {
@@ -40,40 +43,44 @@ import {
 } from "@/lib/analytics/income-budget";
 import { IncomeSpendingOverview } from "@/components/dashboard/income-spending-overview";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
-import type { TransactionWithRelations } from "@/types/database";
+
+export const maxDuration = 60;
 
 interface DashboardPageProps {
   searchParams: Promise<{ month?: string }>;
 }
 
 async function DashboardContent({ month }: { month: string }) {
-  const categories = await getCategories();
-  const transactions = (await getTransactions()) as TransactionWithRelations[];
-  const [budgets, budgetPrefs] = await Promise.all([
-    getBudgets(month),
-    getBudgetPreferences(),
-  ]);
+  const [categories, analyticsRows, budgets, budgetPrefs, recentTransactions] =
+    await Promise.all([
+      getCategories(),
+      getTransactionsForAnalytics(),
+      getBudgets(month),
+      getBudgetPreferences(),
+      getRecentTransactions(month, 10),
+    ]);
+
   const budgetRemaining = computeBudgetRemaining(budgets);
   const stats = computeDashboardStats(
-    transactions,
+    analyticsRows,
     categories,
     month,
     budgetRemaining
   );
   const incomeStats = computeIncomeSpendingStats(
-    transactions,
+    analyticsRows,
     month,
     budgetPrefs
   );
   const weekLabel = getWeekRange().label;
 
   const months = [
-    ...new Set(transactions.map((t) => t.transaction_date.slice(0, 7))),
+    ...new Set(analyticsRows.map((t) => t.transaction_date.slice(0, 7))),
   ].sort();
   if (!months.includes(month)) months.push(month);
   months.sort();
 
-  const hasData = transactions.length > 0;
+  const hasData = analyticsRows.length > 0;
   const topMerchant = stats.topMerchants[0];
 
   if (!hasData) {
@@ -197,7 +204,7 @@ async function DashboardContent({ month }: { month: string }) {
           />
           <CardContent className="p-0">
             <TransactionsTable
-              transactions={stats.recentTransactions}
+              transactions={recentTransactions}
               categories={categories}
               compact
             />
