@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { extractRbcMerchantName } from "@/lib/csv/rbc-format";
 
 export function normalizeDescription(description: string): string {
   return description
@@ -9,8 +10,8 @@ export function normalizeDescription(description: string): string {
 }
 
 export function extractMerchantName(description: string): string {
-  const normalized = normalizeDescription(description);
-  // Take first meaningful segment before common separators
+  const rbcCleaned = extractRbcMerchantName(description);
+  const normalized = normalizeDescription(rbcCleaned);
   const parts = normalized.split(/\s{2,}|#|\*/);
   return parts[0]?.trim() || normalized;
 }
@@ -27,7 +28,6 @@ export function generateDedupeKey(
   return createHash("sha256").update(raw).digest("hex");
 }
 
-// Client-side dedupe key (uses Web Crypto via subtle in browser)
 export async function generateDedupeKeyClient(
   transactionDate: string,
   description: string,

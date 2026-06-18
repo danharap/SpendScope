@@ -23,6 +23,7 @@ export interface DashboardStats {
   monthlySpending: { month: string; total: number }[];
   foodTrend: { month: string; total: number }[];
   recentTransactions: TransactionWithRelations[];
+  subscriptionItems: { name: string; total: number; count: number }[];
 }
 
 function isSpending(tx: TransactionWithRelations): boolean {
@@ -130,6 +131,23 @@ export function computeDashboardStats(
     .sort((a, b) => a.month.localeCompare(b.month))
     .slice(-12);
 
+  const subscriptionItems: { name: string; total: number; count: number }[] = [];
+  const subTotals: Record<string, { total: number; count: number }> = {};
+  for (const t of thisMonthSpending) {
+    const isSub =
+      t.is_subscription ||
+      categoryMap.get(t.category_id ?? "")?.name === "Subscriptions";
+    if (!isSub) continue;
+    const name = t.merchant_name || "Unknown";
+    if (!subTotals[name]) subTotals[name] = { total: 0, count: 0 };
+    subTotals[name].total += spendingAmount(t);
+    subTotals[name].count += 1;
+  }
+  for (const [name, data] of Object.entries(subTotals)) {
+    subscriptionItems.push({ name, ...data });
+  }
+  subscriptionItems.sort((a, b) => b.total - a.total);
+
   return {
     totalSpent,
     foodSpent,
@@ -144,6 +162,7 @@ export function computeDashboardStats(
     monthlySpending: monthlySpending,
     foodTrend: foodTrendData,
     recentTransactions: thisMonth.slice(0, 10),
+    subscriptionItems,
   };
 }
 

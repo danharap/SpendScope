@@ -22,7 +22,12 @@ import { parseCsvFile, hashFile } from "@/lib/csv/parser";
 import {
   detectColumnMapping,
   isMappingComplete,
+  isRbcExport,
 } from "@/lib/csv/column-mapper";
+import {
+  inferRbcAccountName,
+  inferRbcAccountType,
+} from "@/lib/csv/rbc-format";
 import { normalizeRows } from "@/lib/csv/normalizer";
 import { getCategoryName } from "@/lib/categorization/engine";
 import { importTransactions } from "@/lib/actions/transactions";
@@ -65,8 +70,25 @@ export function UploadFlow({
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detectedRbc, setDetectedRbc] = useState(false);
 
   const dedupeSet = new Set(existingDedupeKeys);
+
+  const resolveAccount = async (
+    rows: Record<string, string>[],
+    fileHeaders: string[]
+  ) => {
+    if (isRbcExport(fileHeaders)) {
+      const name = inferRbcAccountName(rows);
+      const type = inferRbcAccountType(rows);
+      return getOrCreateAccount(name, type);
+    }
+    const preset = ACCOUNT_PRESETS[Number(accountPreset)];
+    return getOrCreateAccount(
+      preset.name,
+      accountTypeFilter === "credit_card" ? "credit_card" : preset.account_type
+    );
+  };
 
   const processFile = useCallback(
     async (selectedFile: File) => {
@@ -79,6 +101,19 @@ export function UploadFlow({
       setHeaders(h);
       setParseErrors(errors);
 
+      const rbc = isRbcExport(h);
+      setDetectedRbc(rbc);
+
+      if (rbc) {
+        const type = inferRbcAccountType(rows);
+        setAccountTypeFilter(type === "credit_card" ? "credit_card" : "bank");
+        const presetIdx = ACCOUNT_PRESETS.findIndex(
+          (p) => p.name === inferRbcAccountName(rows)
+        );
+        if (presetIdx >= 0) setAccountPreset(String(presetIdx));
+        toast.success("RBC export detected — columns mapped automatically.");
+      }
+
       const detected = detectColumnMapping(h);
       setMapping(detected);
 
@@ -88,7 +123,7 @@ export function UploadFlow({
         return;
       }
 
-      await buildPreview(rows, detected);
+      await buildPreview(rows, detected, h);
       setLoading(false);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -97,13 +132,10 @@ export function UploadFlow({
 
   const buildPreview = async (
     rows: Record<string, string>[],
-    colMapping: ColumnMapping
+    colMapping: ColumnMapping,
+    fileHeaders: string[] = headers
   ) => {
-    const preset = ACCOUNT_PRESETS[Number(accountPreset)];
-    const account = await getOrCreateAccount(
-      preset.name,
-      accountTypeFilter === "credit_card" ? "credit_card" : preset.account_type
-    );
+    const account = await resolveAccount(rows, fileHeaders);
 
     const { normalized, errors } = await normalizeRows(
       rows,
@@ -111,7 +143,8 @@ export function UploadFlow({
       account.id,
       categories,
       merchantRules,
-      dedupeSet
+      dedupeSet,
+      fileHeaders
     );
 
     setParseErrors((prev) => [...prev, ...errors]);
@@ -130,7 +163,7 @@ export function UploadFlow({
     if (!file) return;
     setLoading(true);
     const { rows } = await parseCsvFile(file);
-    await buildPreview(rows, mapping);
+    await buildPreview(rows, mapping, headers);
     setLoading(false);
   };
 
@@ -140,11 +173,8 @@ export function UploadFlow({
     setLoading(true);
 
     try {
-      const preset = ACCOUNT_PRESETS[Number(accountPreset)];
-      const account = await getOrCreateAccount(
-        preset.name,
-        accountTypeFilter === "credit_card" ? "credit_card" : preset.account_type
-      );
+      const { rows } = await parseCsvFile(file);
+      const account = await resolveAccount(rows, headers);
 
       const toImport = normalizedTx.filter((t) => !dedupeSet.has(t.dedupe_key));
 
@@ -180,6 +210,11 @@ export function UploadFlow({
             <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle className="text-base">Account Details</CardTitle>
+                {detectedRbc && (
+                  <p className="text-sm text-emerald-600">
+                    RBC format detected — account type will be inferred from your CSV.
+                  </p>
+                )}
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">

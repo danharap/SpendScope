@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { NeedsReviewCard } from "@/components/dashboard/needs-review-card";
+import { SubscriptionsSummaryCard } from "@/components/dashboard/subscriptions-summary-card";
+import { BudgetOverview } from "@/components/dashboard/budget-overview";
 import { SpendingByCategoryChart } from "@/components/charts/spending-by-category-chart";
 import { MonthlySpendingChart } from "@/components/charts/monthly-spending-chart";
 import { FoodSpendingTrendChart } from "@/components/charts/food-spending-trend-chart";
@@ -17,6 +19,7 @@ import {
   Wallet,
   AlertCircle,
   Upload,
+  Repeat,
 } from "lucide-react";
 import { getCategories } from "@/lib/actions/accounts";
 import { getTransactions } from "@/lib/actions/transactions";
@@ -90,7 +93,7 @@ async function DashboardContent({ month }: { month: string }) {
         months={months}
       />
       <div className="flex flex-1 flex-col gap-6 p-6">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard
             title="Total Spend"
             value={formatCurrency(stats.totalSpent)}
@@ -109,10 +112,17 @@ async function DashboardContent({ month }: { month: string }) {
             subtitle={`Groceries: ${formatCurrency(stats.groceriesSpent)}`}
           />
           <StatCard
-            title="Budget Remaining"
+            title="Budget Left"
             value={formatCurrency(stats.budgetRemaining)}
             icon={Wallet}
             variant="success"
+          />
+          <StatCard
+            title="Subscriptions"
+            value={formatCurrency(stats.subscriptionsSpent)}
+            icon={Repeat}
+            variant="default"
+            subtitle={`${stats.subscriptionItems.length} active`}
           />
           <StatCard
             title="Needs Review"
@@ -124,15 +134,22 @@ async function DashboardContent({ month }: { month: string }) {
 
         <NeedsReviewCard count={stats.needsReviewCount} />
 
+        <BudgetOverview budgets={budgets} month={month} />
+
         <div className="grid gap-6 lg:grid-cols-2">
           <SpendingByCategoryChart data={stats.spendingByCategory} />
-          <MonthlySpendingChart data={stats.monthlySpending} />
+          <SubscriptionsSummaryCard
+            items={stats.subscriptionItems}
+            total={stats.subscriptionsSpent}
+          />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          <MonthlySpendingChart data={stats.monthlySpending} />
           <FoodSpendingTrendChart data={stats.foodTrend} />
-          <TopMerchantsChart data={stats.topMerchants} />
         </div>
+
+        <TopMerchantsChart data={stats.topMerchants} />
 
         <Card className="shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
