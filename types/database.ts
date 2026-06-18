@@ -3,6 +3,10 @@ export type AccountType = "bank" | "credit_card" | "savings" | "other";
 export interface Profile {
   id: string;
   email: string | null;
+  weekly_spending_limit?: number;
+  hourly_rate?: number;
+  hours_per_week?: number;
+  pay_frequency?: "weekly" | "biweekly" | "monthly";
   created_at: string;
 }
 

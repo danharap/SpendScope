@@ -15,7 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PieChart } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { PieChart, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export default function LoginPage() {
@@ -74,20 +75,27 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute inset-0 dashboard-gradient" aria-hidden />
+      <Card className="relative w-full max-w-md border-border/60 shadow-xl shadow-slate-200/40">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <PieChart className="h-6 w-6" />
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <PieChart className="h-7 w-7" aria-hidden />
           </div>
-          <CardTitle className="text-2xl">
+          <CardTitle className="text-2xl font-semibold tracking-tight">
             {resetMode ? "Reset password" : "Welcome back"}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="leading-relaxed">
             {resetMode
               ? "We'll email you a link to set a new password"
               : "Sign in to your SpendScope dashboard"}
           </CardDescription>
+          {!resetMode && (
+            <Badge variant="outline" className="mx-auto mt-3 gap-1">
+              <ShieldCheck className="h-3 w-3" aria-hidden />
+              CSV-only · No bank credentials
+            </Badge>
+          )}
         </CardHeader>
         <form onSubmit={resetMode ? handleResetPassword : handleLogin}>
           <CardContent className="space-y-4">
@@ -100,6 +108,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="bg-background"
               />
             </div>
             {!resetMode && (
@@ -109,7 +118,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setResetMode(true)}
-                    className="text-xs font-medium text-blue-600 hover:underline"
+                    className="text-xs font-medium text-primary hover:underline"
                   >
                     Forgot password?
                   </button>
@@ -120,16 +129,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  className="bg-background"
                 />
               </div>
             )}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading
                 ? resetMode
                   ? "Sending…"
@@ -149,10 +155,7 @@ export default function LoginPage() {
             ) : (
               <p className="text-center text-sm text-muted-foreground">
                 Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-medium text-blue-600 hover:underline"
-                >
+                <Link href="/signup" className="font-medium text-primary hover:underline">
                   Sign up
                 </Link>
               </p>

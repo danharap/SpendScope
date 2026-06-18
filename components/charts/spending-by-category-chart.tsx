@@ -1,31 +1,19 @@
 "use client";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, Legend } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartCard } from "@/components/design/chart-card";
+import { formatCurrency } from "@/lib/utils/format";
 
 interface SpendingByCategoryChartProps {
   data: { name: string; total: number; color: string }[];
 }
 
 export function SpendingByCategoryChart({ data }: SpendingByCategoryChartProps) {
-  if (data.length === 0) {
-    return (
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Spending by Category</CardTitle>
-        </CardHeader>
-        <CardContent className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-          No spending data for this period
-        </CardContent>
-      </Card>
-    );
-  }
-
   const chartData = data.map((d) => ({
     name: d.name,
     value: d.total,
@@ -37,32 +25,46 @@ export function SpendingByCategoryChart({ data }: SpendingByCategoryChartProps) 
   );
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Spending by Category</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="mx-auto h-[300px] w-full">
-          <PieChart>
-            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-            <Pie
-              data={chartData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={100}
-              paddingAngle={2}
-            >
-              {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-            </Pie>
-            <Legend />
-          </PieChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+    <ChartCard
+      title="Spending by Category"
+      description="Where your money went this month"
+      empty={data.length === 0}
+    >
+      <ChartContainer config={config} className="mx-auto h-[320px] w-full">
+        <PieChart>
+          <ChartTooltip
+            content={
+              <ChartTooltipContent
+                hideLabel
+                formatter={(value) => formatCurrency(Number(value))}
+              />
+            }
+          />
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="45%"
+            innerRadius={70}
+            outerRadius={105}
+            paddingAngle={3}
+            strokeWidth={2}
+            stroke="var(--card)"
+          >
+            {chartData.map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.fill} />
+            ))}
+          </Pie>
+          <Legend
+            verticalAlign="bottom"
+            height={36}
+            formatter={(value) => (
+              <span className="text-xs text-muted-foreground">{value}</span>
+            )}
+          />
+        </PieChart>
+      </ChartContainer>
+    </ChartCard>
   );
 }

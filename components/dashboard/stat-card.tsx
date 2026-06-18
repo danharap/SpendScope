@@ -1,6 +1,10 @@
+"use client";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { HoverLift } from "@/components/design/animated";
 import type { LucideIcon } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 
 interface StatCardProps {
   title: string;
@@ -9,13 +13,14 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: { value: string; positive?: boolean };
   variant?: "default" | "success" | "warning" | "danger";
+  index?: number;
 }
 
 const variantStyles = {
-  default: "text-blue-600 bg-blue-50",
-  success: "text-emerald-600 bg-emerald-50",
-  warning: "text-orange-600 bg-orange-50",
-  danger: "text-red-600 bg-red-50",
+  default: "bg-primary/10 text-primary",
+  success: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  warning: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  danger: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
 };
 
 export function StatCard({
@@ -27,38 +32,49 @@ export function StatCard({
   variant = "default",
 }: StatCardProps) {
   return (
-    <Card className="border shadow-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <div
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg",
-            variantStyles[variant]
-          )}
-        >
-          <Icon className="h-4 w-4" />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold tracking-tight">{value}</div>
-        {(subtitle || trend) && (
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            {trend && (
-              <span
-                className={cn(
-                  "font-medium",
-                  trend.positive ? "text-emerald-600" : "text-red-600"
-                )}
-              >
-                {trend.value}
-              </span>
+    <HoverLift>
+      <Card className="card-premium-hover overflow-hidden">
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            {title}
+          </CardTitle>
+          <div
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-xl",
+              variantStyles[variant]
             )}
-            {subtitle && <span>{subtitle}</span>}
+          >
+            <Icon className="h-5 w-5" aria-hidden />
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="text-2xl font-bold tracking-tight sm:text-3xl">
+            {value}
+          </div>
+          {(subtitle || trend) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {trend && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-medium",
+                    trend.positive
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                      : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                  )}
+                >
+                  {trend.positive ? (
+                    <TrendingDown className="h-3 w-3" aria-hidden />
+                  ) : (
+                    <TrendingUp className="h-3 w-3" aria-hidden />
+                  )}
+                  {trend.value}
+                </span>
+              )}
+              {subtitle && <span>{subtitle}</span>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </HoverLift>
   );
 }

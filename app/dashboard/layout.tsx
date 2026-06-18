@@ -16,7 +16,7 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="bg-slate-50">
+      <SidebarInset className="dashboard-gradient min-h-svh">
         {children}
       </SidebarInset>
     </SidebarProvider>

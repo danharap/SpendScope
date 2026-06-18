@@ -5,6 +5,33 @@ import type { NormalizedTransaction } from "@/types/transaction";
 import { revalidatePath } from "next/cache";
 import { normalizeDescription } from "@/lib/csv/dedupe";
 
+const DEDUPE_CHUNK_SIZE = 200;
+
+async function fetchExistingDedupeKeys(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  keys: string[]
+): Promise<Set<string>> {
+  const existing = new Set<string>();
+  if (keys.length === 0) return existing;
+
+  for (let i = 0; i < keys.length; i += DEDUPE_CHUNK_SIZE) {
+    const chunk = keys.slice(i, i + DEDUPE_CHUNK_SIZE);
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("dedupe_key")
+      .eq("user_id", userId)
+      .in("dedupe_key", chunk);
+
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      existing.add(row.dedupe_key);
+    }
+  }
+
+  return existing;
+}
+
 export async function getExistingDedupeKeys(): Promise<Set<string>> {
   const user = await getUser();
   if (!user) return new Set();
@@ -38,89 +65,95 @@ export async function importTransactions(params: {
   fileHash: string;
   transactions: NormalizedTransaction[];
 }) {
-  const user = await getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  const supabase = await createClient();
-  const { accountId, fileName, fileHash, transactions } = params;
+    const supabase = await createClient();
+    const { accountId, fileName, fileHash, transactions } = params;
 
-  const toImport = transactions.filter((t) => t);
-  const duplicatesInBatch = new Set<string>();
-  const unique: NormalizedTransaction[] = [];
+    const duplicatesInBatch = new Set<string>();
+    const unique: NormalizedTransaction[] = [];
 
-  for (const tx of toImport) {
-    if (duplicatesInBatch.has(tx.dedupe_key)) continue;
-    duplicatesInBatch.add(tx.dedupe_key);
-    unique.push(tx);
-  }
+    for (const tx of transactions) {
+      if (!tx?.dedupe_key) continue;
+      if (duplicatesInBatch.has(tx.dedupe_key)) continue;
+      duplicatesInBatch.add(tx.dedupe_key);
+      unique.push(tx);
+    }
 
-  const { data: existing } = await supabase
-    .from("transactions")
-    .select("dedupe_key")
-    .eq("user_id", user.id)
-    .in(
-      "dedupe_key",
-      unique.map((t) => t.dedupe_key)
-    );
+    let existingKeys = new Set<string>();
+    if (unique.length > 0) {
+      existingKeys = await fetchExistingDedupeKeys(
+        supabase,
+        user.id,
+        unique.map((t) => t.dedupe_key)
+      );
+    }
 
-  const existingKeys = new Set((existing ?? []).map((t) => t.dedupe_key));
-  const newTransactions = unique.filter((t) => !existingKeys.has(t.dedupe_key));
+    const newTransactions = unique.filter((t) => !existingKeys.has(t.dedupe_key));
 
-  const { data: importRecord, error: importError } = await supabase
-    .from("imports")
-    .insert({
-      user_id: user.id,
-      account_id: accountId,
-      file_name: fileName,
-      file_hash: fileHash,
-      rows_total: transactions.length,
-      rows_imported: newTransactions.length,
-      rows_skipped: transactions.length - newTransactions.length,
-    })
-    .select()
-    .single();
-
-  if (importError) return { error: importError.message };
-
-  if (newTransactions.length > 0) {
-    const { error: txError } = await supabase.from("transactions").insert(
-      newTransactions.map((t) => ({
+    const { data: importRecord, error: importError } = await supabase
+      .from("imports")
+      .insert({
         user_id: user.id,
         account_id: accountId,
-        import_id: importRecord.id,
-        transaction_date: t.transaction_date,
-        description_raw: t.description_raw,
-        merchant_name: t.merchant_name,
-        amount: t.amount,
-        currency: t.currency,
-        category_id: t.category_id,
-        subcategory: t.subcategory,
-        transaction_type: t.transaction_type,
-        is_income: t.is_income,
-        is_transfer: t.is_transfer,
-        is_subscription: t.is_subscription,
-        needs_review: t.needs_review,
-        dedupe_key: t.dedupe_key,
-      }))
-    );
+        file_name: fileName,
+        file_hash: fileHash,
+        rows_total: transactions.length,
+        rows_imported: newTransactions.length,
+        rows_skipped: transactions.length - newTransactions.length,
+      })
+      .select()
+      .single();
 
-    if (txError) return { error: txError.message };
+    if (importError) return { error: importError.message };
+    if (!importRecord) return { error: "Failed to create import record" };
+
+    if (newTransactions.length > 0) {
+      const { error: txError } = await supabase.from("transactions").insert(
+        newTransactions.map((t) => ({
+          user_id: user.id,
+          account_id: accountId,
+          import_id: importRecord.id,
+          transaction_date: t.transaction_date,
+          description_raw: t.description_raw,
+          merchant_name: t.merchant_name,
+          amount: t.amount,
+          currency: t.currency,
+          category_id: t.category_id,
+          subcategory: t.subcategory,
+          transaction_type: t.transaction_type,
+          is_income: t.is_income,
+          is_transfer: t.is_transfer,
+          is_subscription: t.is_subscription,
+          needs_review: t.needs_review,
+          dedupe_key: t.dedupe_key,
+        }))
+      );
+
+      if (txError) return { error: txError.message };
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/insights");
+
+    return {
+      success: true,
+      summary: {
+        totalRows: transactions.length,
+        imported: newTransactions.length,
+        duplicatesSkipped: transactions.length - newTransactions.length,
+        needsReview: newTransactions.filter((t) => t.needs_review).length,
+        errors: [] as string[],
+      },
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Import failed unexpectedly",
+    };
   }
-
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/transactions");
-  revalidatePath("/dashboard/insights");
-
-  return {
-    success: true,
-    summary: {
-      totalRows: transactions.length,
-      imported: newTransactions.length,
-      duplicatesSkipped: transactions.length - newTransactions.length,
-      needsReview: newTransactions.filter((t) => t.needs_review).length,
-      errors: [] as string[],
-    },
-  };
 }
 
 export async function updateTransaction(
@@ -129,6 +162,7 @@ export async function updateTransaction(
     category_id?: string | null;
     is_subscription?: boolean;
     is_transfer?: boolean;
+    is_income?: boolean;
     notes?: string | null;
     needs_review?: boolean;
   }
@@ -198,7 +232,6 @@ export async function createMerchantRuleFromTransaction(
     { onConflict: "user_id,match_text", ignoreDuplicates: false }
   );
 
-  // upsert may fail without unique constraint — use insert with check
   if (error) {
     const { data: existing } = await supabase
       .from("merchant_rules")

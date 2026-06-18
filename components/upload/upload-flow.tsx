@@ -8,6 +8,7 @@ import { CSVPreviewTable } from "@/components/upload/csv-preview-table";
 import { ColumnMappingDialog } from "@/components/upload/column-mapping-dialog";
 import { ImportSummaryCard } from "@/components/upload/import-summary-card";
 import { RbcHelpCard } from "@/components/upload/rbc-help-card";
+import { ImportStepper, type ImportStep } from "@/components/design/import-stepper";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -73,6 +74,15 @@ export function UploadFlow({
   const [detectedRbc, setDetectedRbc] = useState(false);
 
   const dedupeSet = new Set(existingDedupeKeys);
+
+  const currentImportStep: ImportStep =
+    step === "upload"
+      ? 1
+      : step === "preview"
+        ? 2
+        : step === "importing"
+          ? 3
+          : 4;
 
   const resolveAccount = async (
     rows: Record<string, string>[],
@@ -148,7 +158,9 @@ export function UploadFlow({
     );
 
     setParseErrors((prev) => [...prev, ...errors]);
-    setNormalizedTx(normalized);
+    setNormalizedTx(
+      normalized.map(({ isDuplicate: _d, rowIndex: _i, ...tx }) => tx)
+    );
 
     const preview: ImportPreviewRow[] = normalized.map((tx) => ({
       ...tx,
@@ -178,6 +190,12 @@ export function UploadFlow({
 
       const toImport = normalizedTx.filter((t) => !dedupeSet.has(t.dedupe_key));
 
+      if (toImport.length === 0) {
+        toast.info("All transactions in this file were already imported.");
+        setStep("preview");
+        return;
+      }
+
       const result = await importTransactions({
         accountId: account.id,
         fileName: file.name,
@@ -203,113 +221,131 @@ export function UploadFlow({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-3">
-      <div className="space-y-6 lg:col-span-2">
-        {step === "upload" && (
-          <>
-            <Card className="shadow-sm">
-              <CardHeader>
-                <CardTitle className="text-base">Account Details</CardTitle>
-                {detectedRbc && (
-                  <p className="text-sm text-emerald-600">
-                    RBC format detected — account type will be inferred from your CSV.
-                  </p>
-                )}
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Account</Label>
-                  <Select
-                    value={accountPreset}
-                    onValueChange={(v) => setAccountPreset(v ?? "0")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ACCOUNT_PRESETS.map((a, i) => (
-                        <SelectItem key={a.name} value={String(i)}>
-                          {a.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>CSV Type</Label>
-                  <Select
-                    value={accountTypeFilter}
-                    onValueChange={(v) =>
-                      setAccountTypeFilter(v as "bank" | "credit_card")
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="bank">Bank account</SelectItem>
-                      <SelectItem value="credit_card">Credit card</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+    <div className="space-y-8">
+      <ImportStepper currentStep={currentImportStep} />
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          {step === "upload" && (
+            <>
+              <Card className="card-premium">
+                <CardHeader>
+                  <CardTitle className="text-base font-semibold">Select account</CardTitle>
+                  {detectedRbc && (
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400">
+                      RBC format detected — account type will be inferred from your CSV.
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Account</Label>
+                    <Select
+                      value={accountPreset}
+                      onValueChange={(v) => setAccountPreset(v ?? "0")}
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ACCOUNT_PRESETS.map((a, i) => (
+                          <SelectItem key={a.name} value={String(i)}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>CSV Type</Label>
+                    <Select
+                      value={accountTypeFilter}
+                      onValueChange={(v) =>
+                        setAccountTypeFilter(v as "bank" | "credit_card")
+                      }
+                    >
+                      <SelectTrigger className="bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bank">Bank account</SelectItem>
+                        <SelectItem value="credit_card">Credit card</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <CSVUploader onFileSelect={processFile} disabled={loading} />
+            </>
+          )}
+
+          {step === "preview" && (
+            <>
+              <Card className="card-premium">
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-base font-semibold">Preview transactions</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {file?.name} · {previewRows.length} transactions ready to import
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button variant="outline" onClick={() => setStep("upload")}>
+                      Back
+                    </Button>
+                    <Button onClick={handleImport} disabled={loading}>
+                      Confirm import
+                    </Button>
+                  </div>
+                </CardHeader>
+              </Card>
+              <CSVPreviewTable rows={previewRows} />
+              {parseErrors.length > 0 && (
+                <p className="rounded-xl border border-amber-200/80 bg-amber-50/60 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400">
+                  {parseErrors.length} row(s) could not be parsed and will be skipped
+                </p>
+              )}
+            </>
+          )}
+
+          {step === "importing" && (
+            <Card className="card-premium">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="mt-4 font-medium">Importing transactions…</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Categorizing and deduplicating your data
+                </p>
               </CardContent>
             </Card>
+          )}
 
-            <CSVUploader onFileSelect={processFile} disabled={loading} />
-          </>
-        )}
-
-        {step === "preview" && (
-          <>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Preview Import</h2>
-                <p className="text-sm text-muted-foreground">
-                  {file?.name} · {previewRows.length} transactions
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep("upload")}>
-                  Back
+          {step === "done" && summary && (
+            <>
+              <ImportSummaryCard summary={summary} />
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => router.push("/dashboard")}>
+                  Go to Dashboard
                 </Button>
-                <Button onClick={handleImport} disabled={loading}>
-                  Confirm Import
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setStep("upload");
+                    setFile(null);
+                    setPreviewRows([]);
+                    setSummary(null);
+                  }}
+                >
+                  Upload Another
                 </Button>
               </div>
-            </div>
-            <CSVPreviewTable rows={previewRows} />
-            {parseErrors.length > 0 && (
-              <p className="text-sm text-orange-600">
-                {parseErrors.length} row(s) could not be parsed
-              </p>
-            )}
-          </>
-        )}
+            </>
+          )}
+        </div>
 
-        {step === "done" && summary && (
-          <>
-            <ImportSummaryCard summary={summary} />
-            <div className="flex gap-2">
-              <Button onClick={() => router.push("/dashboard")}>
-                Go to Dashboard
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setStep("upload");
-                  setFile(null);
-                  setPreviewRows([]);
-                  setSummary(null);
-                }}
-              >
-                Upload Another
-              </Button>
-            </div>
-          </>
-        )}
+        <RbcHelpCard />
       </div>
-
-      <RbcHelpCard />
 
       <ColumnMappingDialog
         open={showMappingDialog}

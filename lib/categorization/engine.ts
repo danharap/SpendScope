@@ -4,6 +4,7 @@ import {
   MERCHANT_KEYWORD_RULES,
   SUBSCRIPTION_KEYWORDS,
   TRANSFER_KEYWORDS,
+  INCOME_KEYWORDS,
 } from "@/lib/categorization/rules";
 
 export interface CategorizationResult {
@@ -42,8 +43,40 @@ export function categorizeTransaction(
   const merchantName = extractMerchantName(merchant || description);
   const searchText = `${normalizedDesc} ${normalizeDescription(merchantName)}`;
 
-  // Income detection
+  // Income & deposit detection (positive amounts)
   if (amount > 0) {
+    const refundCat = findCategoryByName(categories, "Refunds");
+    const incomeCat = findCategoryByName(categories, "Income");
+    const isRefund =
+      searchText.includes("REFUND") || searchText.includes("REVERSAL");
+
+    if (isRefund) {
+      return {
+        categoryId: refundCat?.id ?? null,
+        categoryName: refundCat?.name ?? "Refunds",
+        subcategory: null,
+        merchantName,
+        isIncome: false,
+        isTransfer: false,
+        isSubscription: false,
+        needsReview: false,
+      };
+    }
+
+    const isPayrollOrDeposit = matchKeywords(searchText, INCOME_KEYWORDS);
+    if (isPayrollOrDeposit) {
+      return {
+        categoryId: incomeCat?.id ?? null,
+        categoryName: incomeCat?.name ?? "Income",
+        subcategory: "Payroll / Deposit",
+        merchantName,
+        isIncome: true,
+        isTransfer: false,
+        isSubscription: false,
+        needsReview: false,
+      };
+    }
+
     const transferMatch = matchKeywords(searchText, TRANSFER_KEYWORDS);
     if (transferMatch) {
       const cat = findCategoryByName(categories, "Transfers");
@@ -59,20 +92,15 @@ export function categorizeTransaction(
       };
     }
 
-    const refundCat = findCategoryByName(categories, "Refunds");
-    const incomeCat = findCategoryByName(categories, "Income");
-    const isRefund =
-      searchText.includes("REFUND") || searchText.includes("REVERSAL");
-    const cat = isRefund ? refundCat : incomeCat;
     return {
-      categoryId: cat?.id ?? null,
-      categoryName: cat?.name ?? "Income",
+      categoryId: incomeCat?.id ?? null,
+      categoryName: incomeCat?.name ?? "Income",
       subcategory: null,
       merchantName,
       isIncome: true,
       isTransfer: false,
       isSubscription: false,
-      needsReview: false,
+      needsReview: true,
     };
   }
 

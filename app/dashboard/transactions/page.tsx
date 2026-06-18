@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TransactionFilters } from "@/components/transactions/transaction-filters";
+import { PageContainer } from "@/components/design/page-container";
+import { Card } from "@/components/ui/card";
 import { getCategories, getAccounts } from "@/lib/actions/accounts";
 import { getTransactions } from "@/lib/actions/transactions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,17 +48,20 @@ async function TransactionsContent({ params }: { params: SearchParams }) {
     <>
       <DashboardHeader
         title="Transactions"
-        description={`${transactions.length} transactions`}
+        description={`${transactions.length.toLocaleString()} transactions from your uploaded CSV files`}
         showMonthSelector={false}
         months={[]}
+        showUploadButton
       />
-      <div className="flex flex-1 flex-col gap-6 p-6">
+      <PageContainer>
         <TransactionFilters categories={categories} accounts={accounts} />
-        <TransactionsTable
-          transactions={transactions}
-          categories={categories}
-        />
-      </div>
+        <Card className="card-premium overflow-hidden">
+          <TransactionsTable
+            transactions={transactions}
+            categories={categories}
+          />
+        </Card>
+      </PageContainer>
     </>
   );
 }
@@ -69,10 +74,10 @@ export default async function TransactionsPage({
   return (
     <Suspense
       fallback={
-        <div className="p-6">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="mt-6 h-96 w-full" />
-        </div>
+        <PageContainer>
+          <Skeleton className="h-24 w-full rounded-2xl" />
+          <Skeleton className="h-96 w-full rounded-2xl" />
+        </PageContainer>
       }
     >
       <TransactionsContent params={params} />

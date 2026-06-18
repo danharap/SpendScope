@@ -42,9 +42,9 @@ export function BudgetForm({ categories, month }: BudgetFormProps) {
   };
 
   return (
-    <Card className="shadow-sm">
+    <Card className="card-premium">
       <CardHeader>
-        <CardTitle className="text-base">Set Monthly Budget</CardTitle>
+        <CardTitle className="text-base font-semibold">Set monthly budget</CardTitle>
       </CardHeader>
       <CardContent>
         <form
@@ -57,7 +57,7 @@ export function BudgetForm({ categories, month }: BudgetFormProps) {
               value={categoryId}
               onValueChange={(v) => setCategoryId(v ?? "")}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-background">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>

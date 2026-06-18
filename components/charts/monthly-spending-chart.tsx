@@ -6,51 +6,52 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatMonthLabel } from "@/lib/utils/format";
+import { ChartCard } from "@/components/design/chart-card";
+import { formatCurrency, formatMonthLabel } from "@/lib/utils/format";
 
 interface MonthlySpendingChartProps {
   data: { month: string; total: number }[];
 }
 
 export function MonthlySpendingChart({ data }: MonthlySpendingChartProps) {
-  if (data.length === 0) {
-    return (
-      <Card className="shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Monthly Spending</CardTitle>
-        </CardHeader>
-        <CardContent className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
-          Upload transactions to see monthly trends
-        </CardContent>
-      </Card>
-    );
-  }
-
   const chartData = data.map((d) => ({
     month: formatMonthLabel(d.month).split(" ")[0],
     total: d.total,
   }));
 
   return (
-    <Card className="shadow-sm">
-      <CardHeader>
-        <CardTitle className="text-base">Monthly Spending</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
-          config={{ total: { label: "Spending", color: "hsl(var(--chart-1))" } }}
-          className="h-[300px] w-full"
-        >
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar dataKey="total" fill="var(--color-total)" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
+    <ChartCard
+      title="Monthly Spending"
+      description="Your spending over the last 12 months"
+      empty={data.length === 0}
+      emptyMessage="Upload transactions to see monthly trends"
+    >
+      <ChartContainer
+        config={{ total: { label: "Spending", color: "var(--chart-1)" } }}
+        className="h-[320px] w-full"
+      >
+        <BarChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
+          <XAxis dataKey="month" tickLine={false} axisLine={false} className="text-xs" />
+          <YAxis
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => `$${v}`}
+            className="text-xs"
+          />
+          <ChartTooltip
+            content={
+              <ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />
+            }
+          />
+          <Bar
+            dataKey="total"
+            fill="var(--color-total)"
+            radius={[6, 6, 0, 0]}
+            maxBarSize={48}
+          />
+        </BarChart>
+      </ChartContainer>
+    </ChartCard>
   );
 }

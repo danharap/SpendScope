@@ -1,4 +1,7 @@
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { PageContainer } from "@/components/design/page-container";
+import { EmptyState } from "@/components/design/empty-state";
+import { CategoryBadge } from "@/components/design/category-badge";
 import { getMerchantRules } from "@/lib/actions/transactions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,27 +14,24 @@ export default async function MerchantsPage() {
     <>
       <DashboardHeader
         title="Merchants"
-        description="Saved merchant categorization rules"
+        description="Saved merchant categorization rules for automatic classification"
         showMonthSelector={false}
         months={[]}
       />
-      <div className="flex flex-1 flex-col gap-6 p-6">
+      <PageContainer>
         {rules.length === 0 ? (
-          <Card className="shadow-sm">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <Store className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="text-lg font-medium">No merchant rules yet</p>
-              <p className="mt-1 max-w-md text-center text-sm text-muted-foreground">
-                When you categorize a transaction and choose &quot;Create merchant
-                rule&quot;, future imports will automatically use that category.
-              </p>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={Store}
+            title="No merchant rules yet"
+            description='When you categorize a transaction and choose "Create merchant rule", future imports will automatically use that category.'
+            actionLabel="View transactions"
+            actionHref="/dashboard/transactions"
+          />
         ) : (
-          <Card className="shadow-sm">
+          <Card className="card-premium">
             <CardHeader>
-              <CardTitle className="text-base">
-                {rules.length} Merchant Rule{rules.length !== 1 ? "s" : ""}
+              <CardTitle className="text-base font-semibold">
+                {rules.length} merchant rule{rules.length !== 1 ? "s" : ""}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -39,20 +39,26 @@ export default async function MerchantsPage() {
                 {rules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="flex flex-wrap items-center gap-3 rounded-lg border p-4"
+                    className="flex flex-wrap items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 transition-colors hover:bg-muted/30"
                   >
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <p className="font-medium">{rule.merchant_name}</p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="mt-0.5 text-sm text-muted-foreground">
                         Matches: {rule.match_text}
                       </p>
                     </div>
-                    <Badge variant="secondary">
-                      {(rule.categories as { name?: string } | null)?.name ??
-                        "Uncategorized"}
-                    </Badge>
+                    <CategoryBadge
+                      name={
+                        (rule.categories as { name?: string; color?: string } | null)
+                          ?.name ?? "Uncategorized"
+                      }
+                      color={
+                        (rule.categories as { name?: string; color?: string } | null)
+                          ?.color
+                      }
+                    />
                     {rule.is_subscription && (
-                      <Badge>Subscription</Badge>
+                      <Badge variant="secondary">Subscription</Badge>
                     )}
                   </div>
                 ))}
@@ -60,7 +66,7 @@ export default async function MerchantsPage() {
             </CardContent>
           </Card>
         )}
-      </div>
+      </PageContainer>
     </>
   );
 }

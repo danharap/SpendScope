@@ -1,4 +1,6 @@
 import { DashboardHeader } from "@/components/layout/dashboard-header";
+import { PageContainer } from "@/components/design/page-container";
+import { CategoryBadge } from "@/components/design/category-badge";
 import { getCategories } from "@/lib/actions/accounts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,28 +14,24 @@ export default async function CategoriesPage() {
     <>
       <DashboardHeader
         title="Categories"
-        description="Spending categories for transaction classification"
+        description="Spending categories used to classify your transactions"
         showMonthSelector={false}
         months={[]}
       />
-      <div className="flex flex-1 flex-col gap-6 p-6">
-        <Card className="shadow-sm">
+      <PageContainer>
+        <Card className="card-premium">
           <CardHeader>
-            <CardTitle className="text-base">Default Categories</CardTitle>
+            <CardTitle className="text-base font-semibold">Default categories</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {defaults.map((cat) => (
                 <div
                   key={cat.id}
-                  className="flex items-center gap-3 rounded-lg border p-3"
+                  className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-4"
                 >
-                  <span
-                    className="h-4 w-4 rounded-full"
-                    style={{ backgroundColor: cat.color }}
-                  />
-                  <span className="font-medium">{cat.name}</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">
+                  <CategoryBadge name={cat.name} color={cat.color} />
+                  <Badge variant="outline" className="ml-auto text-xs">
                     Default
                   </Badge>
                 </div>
@@ -43,22 +41,18 @@ export default async function CategoriesPage() {
         </Card>
 
         {custom.length > 0 && (
-          <Card className="shadow-sm">
+          <Card className="card-premium">
             <CardHeader>
-              <CardTitle className="text-base">Custom Categories</CardTitle>
+              <CardTitle className="text-base font-semibold">Custom categories</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {custom.map((cat) => (
                   <div
                     key={cat.id}
-                    className="flex items-center gap-3 rounded-lg border p-3"
+                    className="flex items-center gap-3 rounded-xl border border-border/60 bg-muted/20 p-4"
                   >
-                    <span
-                      className="h-4 w-4 rounded-full"
-                      style={{ backgroundColor: cat.color }}
-                    />
-                    <span className="font-medium">{cat.name}</span>
+                    <CategoryBadge name={cat.name} color={cat.color} />
                   </div>
                 ))}
               </div>
@@ -66,12 +60,12 @@ export default async function CategoriesPage() {
           </Card>
         )}
 
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm leading-relaxed text-muted-foreground">
           Categories are assigned automatically during CSV import based on
-          merchant keywords. You can override categories on the Transactions
-          page and save merchant rules for future imports.
+          merchant keywords. Override categories on the Transactions page and
+          save merchant rules for future imports.
         </p>
-      </div>
+      </PageContainer>
     </>
   );
 }

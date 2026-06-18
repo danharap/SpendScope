@@ -15,7 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { PieChart } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { PieChart, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SignupPage() {
@@ -42,7 +43,6 @@ export default function SignupPage() {
       return;
     }
 
-    // Supabase returns success for existing emails (no error) but with empty identities
     const alreadyRegistered =
       data.user &&
       Array.isArray(data.user.identities) &&
@@ -63,7 +63,6 @@ export default function SignupPage() {
       return;
     }
 
-    // New account — email confirmation required
     toast.success(
       "Account created! Check your email for a confirmation link, then sign in."
     );
@@ -72,16 +71,23 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 p-4">
-      <Card className="w-full max-w-md shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute inset-0 dashboard-gradient" aria-hidden />
+      <Card className="relative w-full max-w-md border-border/60 shadow-xl shadow-slate-200/40">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <PieChart className="h-6 w-6" />
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <PieChart className="h-7 w-7" aria-hidden />
           </div>
-          <CardTitle className="text-2xl">Create account</CardTitle>
-          <CardDescription>
-            Start tracking your RBC spending with SpendScope
+          <CardTitle className="text-2xl font-semibold tracking-tight">
+            Create account
+          </CardTitle>
+          <CardDescription className="leading-relaxed">
+            Start tracking your spending with CSV uploads — no bank connection required
           </CardDescription>
+          <Badge variant="outline" className="mx-auto mt-3 gap-1">
+            <ShieldCheck className="h-3 w-3" aria-hidden />
+            CSV-only · No bank credentials
+          </Badge>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4">
@@ -94,6 +100,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="bg-background"
               />
             </div>
             <div className="space-y-2">
@@ -105,6 +112,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                className="bg-background"
               />
               <p className="text-xs text-muted-foreground">
                 Minimum 6 characters
@@ -112,19 +120,12 @@ export default function SignupPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Creating account…" : "Create account"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link
-                href="/login"
-                className="font-medium text-blue-600 hover:underline"
-              >
+              <Link href="/login" className="font-medium text-primary hover:underline">
                 Sign in
               </Link>
             </p>

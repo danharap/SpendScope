@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { deleteAllUserData } from "@/lib/actions/settings";
 import { createClient } from "@/lib/supabase/client";
-import { Shield, Trash2, LogOut, AlertTriangle } from "lucide-react";
+import { Shield, Trash2, LogOut, AlertTriangle, FileSpreadsheet, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 interface SettingsPanelProps {
@@ -47,9 +47,9 @@ export function SettingsPanel({ email }: SettingsPanelProps) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <Card className="shadow-sm">
+      <Card className="card-premium">
         <CardHeader>
-          <CardTitle className="text-base">Account</CardTitle>
+          <CardTitle className="text-base font-semibold">Profile</CardTitle>
           <CardDescription>Your SpendScope account</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -58,25 +58,54 @@ export function SettingsPanel({ email }: SettingsPanelProps) {
             <p className="font-medium">{email}</p>
           </div>
           <Button variant="outline" onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
+            <LogOut className="mr-2 h-4 w-4" aria-hidden />
             Sign out
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
+      <Card className="card-premium overflow-hidden">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Shield className="h-5 w-5 text-blue-600" />
-            Privacy
+          <CardTitle className="flex items-center gap-2 text-base font-semibold">
+            <Shield className="h-5 w-5 text-primary" aria-hidden />
+            Privacy & security
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                icon: FileSpreadsheet,
+                title: "CSV-only app",
+                text: "Import files you export yourself",
+              },
+              {
+                icon: Lock,
+                title: "No bank login",
+                text: "Credentials are never requested or stored",
+              },
+              {
+                icon: Shield,
+                title: "Protected data",
+                text: "Supabase auth and row-level security",
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="rounded-xl border border-border/60 bg-muted/20 p-4"
+              >
+                <item.icon className="h-5 w-5 text-primary" aria-hidden />
+                <p className="mt-2 text-sm font-medium">{item.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  {item.text}
+                </p>
+              </div>
+            ))}
+          </div>
           <ul className="space-y-2 text-sm text-muted-foreground">
-            <li>• CSV upload only — no bank credentials stored</li>
             <li>• No connection to RBC or any financial institution</li>
-            <li>• Your data is protected by Supabase Row Level Security</li>
             <li>• Only you can access your transactions</li>
+            <li>• Delete all imported data anytime below</li>
           </ul>
         </CardContent>
       </Card>
@@ -84,7 +113,7 @@ export function SettingsPanel({ email }: SettingsPanelProps) {
       <Separator />
 
       <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
+        <AlertTriangle className="h-4 w-4" aria-hidden />
         <AlertTitle>Danger zone</AlertTitle>
         <AlertDescription>
           Deleting all data removes every transaction, import record, budget,
@@ -97,7 +126,7 @@ export function SettingsPanel({ email }: SettingsPanelProps) {
         onClick={handleDeleteData}
         disabled={pending}
       >
-        <Trash2 className="mr-2 h-4 w-4" />
+        <Trash2 className="mr-2 h-4 w-4" aria-hidden />
         Delete all imported data
       </Button>
     </div>

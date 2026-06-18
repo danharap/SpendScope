@@ -267,6 +267,24 @@ export function generateInsights(
     });
   }
 
+  const monthIncome = transactions
+    .filter(
+      (t) =>
+        t.is_income &&
+        Number(t.amount) > 0 &&
+        t.transaction_date >= start &&
+        t.transaction_date <= end
+    )
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  if (monthIncome > 0) {
+    insights.push({
+      id: "income",
+      text: `You received $${monthIncome.toFixed(2)} in deposits this month from your uploaded CSV.`,
+      type: "success",
+    });
+  }
+
   const days = dayOfMonth();
   const totalSpent = spending.reduce(
     (s, t) => s + Math.abs(Number(t.amount)),

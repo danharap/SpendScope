@@ -9,7 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,6 +27,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CategorySelect } from "@/components/transactions/category-select";
+import { EmptyState } from "@/components/design/empty-state";
+import { StatusBadge } from "@/components/design/category-badge";
 import { formatCurrency } from "@/lib/utils/format";
 import type { Category } from "@/types/database";
 import type { TransactionWithRelations } from "@/types/database";
@@ -36,17 +37,29 @@ import {
   deleteTransaction,
   createMerchantRuleFromTransaction,
 } from "@/lib/actions/transactions";
-import { MoreHorizontal, Repeat, ArrowLeftRight, Trash2 } from "lucide-react";
+import { MoreHorizontal, Repeat, ArrowLeftRight, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { format, parseISO } from "date-fns";
 
 interface TransactionsTableProps {
   transactions: TransactionWithRelations[];
   categories: Category[];
+  compact?: boolean;
+}
+
+function formatDate(dateStr: string) {
+  try {
+    return format(parseISO(dateStr), "MMM d, yyyy");
+  } catch {
+    return dateStr;
+  }
 }
 
 export function TransactionsTable({
   transactions,
   categories,
+  compact = false,
 }: TransactionsTableProps) {
   const [pending, startTransition] = useTransition();
   const [noteDialog, setNoteDialog] = useState<{
@@ -65,10 +78,7 @@ export function TransactionsTable({
     });
   };
 
-  const handleFlag = (
-    id: string,
-    flag: "subscription" | "transfer"
-  ) => {
+  const handleFlag = (id: string, flag: "subscription" | "transfer") => {
     startTransition(async () => {
       const updates =
         flag === "subscription"
@@ -113,135 +123,165 @@ export function TransactionsTable({
 
   if (transactions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-        <p className="text-muted-foreground">No transactions found</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Upload a CSV to get started
-        </p>
-      </div>
+      <EmptyState
+        icon={Upload}
+        title="No transactions found"
+        description="Upload your first RBC CSV file to start tracking your spending."
+        actionLabel="Upload CSV"
+        actionHref="/dashboard/upload"
+        className={compact ? "border-0 bg-transparent py-10" : undefined}
+      />
     );
   }
 
   return (
     <>
-      <div className="rounded-lg border">
+      <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Merchant</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Account</TableHead>
-              <TableHead>Flags</TableHead>
-              <TableHead className="w-[50px]" />
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm">Date</TableHead>
+              <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm">Merchant</TableHead>
+              {!compact && (
+                <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm hidden md:table-cell">
+                  Description
+                </TableHead>
+              )}
+              <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm">Category</TableHead>
+              <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm text-right">
+                Amount
+              </TableHead>
+              {!compact && (
+                <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm hidden lg:table-cell">
+                  Account
+                </TableHead>
+              )}
+              <TableHead className="sticky top-0 bg-card/95 backdrop-blur-sm">Flags</TableHead>
+              <TableHead className="sticky top-0 w-[50px] bg-card/95 backdrop-blur-sm" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions.map((tx) => (
-              <TableRow key={tx.id}>
-                <TableCell className="whitespace-nowrap">
-                  {tx.transaction_date}
-                </TableCell>
-                <TableCell className="max-w-[140px] truncate font-medium">
-                  {tx.merchant_name}
-                </TableCell>
-                <TableCell className="max-w-[180px] truncate text-muted-foreground">
-                  {tx.description_raw}
-                </TableCell>
-                <TableCell>
-                  <CategorySelect
-                    categories={categories}
-                    value={tx.category_id}
-                    onChange={(catId) => handleCategoryChange(tx.id, catId)}
-                    disabled={pending}
-                  />
-                </TableCell>
-                <TableCell
-                  className={`text-right font-medium ${Number(tx.amount) < 0 ? "text-red-600" : "text-emerald-600"}`}
+            {transactions.map((tx) => {
+              const amount = Number(tx.amount);
+              const isExpense = amount < 0;
+              return (
+                <TableRow
+                  key={tx.id}
+                  className={cn(
+                    "group transition-colors",
+                    tx.needs_review && "bg-amber-50/40 dark:bg-amber-950/10"
+                  )}
                 >
-                  {formatCurrency(Number(tx.amount))}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {tx.accounts?.name ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {tx.needs_review && (
-                      <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">
-                        Review
-                      </Badge>
+                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                    {formatDate(tx.transaction_date)}
+                  </TableCell>
+                  <TableCell className="max-w-[160px] truncate font-medium">
+                    {tx.merchant_name}
+                  </TableCell>
+                  {!compact && (
+                    <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground hidden md:table-cell">
+                      {tx.description_raw}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <CategorySelect
+                      categories={categories}
+                      value={tx.category_id}
+                      onChange={(catId) => handleCategoryChange(tx.id, catId)}
+                      disabled={pending}
+                    />
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-semibold tabular-nums",
+                      isExpense
+                        ? "text-rose-600 dark:text-rose-400"
+                        : "text-emerald-600 dark:text-emerald-400"
                     )}
-                    {tx.is_subscription && (
-                      <Badge variant="secondary">Sub</Badge>
-                    )}
-                    {tx.is_transfer && (
-                      <Badge variant="outline">Transfer</Badge>
-                    )}
-                    {tx.is_income && (
-                      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                        Income
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button variant="ghost" size="icon" className="h-8 w-8" />
-                      }
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() =>
-                          handleFlag(tx.id, "subscription")
+                  >
+                    {formatCurrency(amount)}
+                  </TableCell>
+                  {!compact && (
+                    <TableCell className="text-sm text-muted-foreground hidden lg:table-cell">
+                      {tx.accounts?.name ?? "—"}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {tx.needs_review && (
+                        <StatusBadge variant="review">Review</StatusBadge>
+                      )}
+                      {tx.is_subscription && (
+                        <StatusBadge variant="subscription">Sub</StatusBadge>
+                      )}
+                      {tx.is_transfer && (
+                        <StatusBadge variant="transfer">Transfer</StatusBadge>
+                      )}
+                      {tx.is_income && (
+                        <StatusBadge variant="income">Income</StatusBadge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-70 group-hover:opacity-100"
+                            aria-label="Transaction actions"
+                          />
                         }
                       >
-                        <Repeat className="mr-2 h-4 w-4" />
-                        Mark as subscription
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleFlag(tx.id, "transfer")}
-                      >
-                        <ArrowLeftRight className="mr-2 h-4 w-4" />
-                        Mark as transfer
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() =>
-                          setNoteDialog({
-                            id: tx.id,
-                            notes: tx.notes ?? "",
-                          })
-                        }
-                      >
-                        Add note
-                      </DropdownMenuItem>
-                      {tx.category_id && (
+                        <MoreHorizontal className="h-4 w-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => handleFlag(tx.id, "subscription")}
+                        >
+                          <Repeat className="mr-2 h-4 w-4" />
+                          Mark as subscription
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleFlag(tx.id, "transfer")}
+                        >
+                          <ArrowLeftRight className="mr-2 h-4 w-4" />
+                          Mark as transfer
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() =>
-                            handleSaveRule(tx.id, tx.category_id!)
+                            setNoteDialog({
+                              id: tx.id,
+                              notes: tx.notes ?? "",
+                            })
                           }
                         >
-                          Create merchant rule
+                          Add note
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-red-600"
-                        onClick={() => handleDelete(tx.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+                        {tx.category_id && (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              handleSaveRule(tx.id, tx.category_id!)
+                            }
+                          >
+                            Create merchant rule
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => handleDelete(tx.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

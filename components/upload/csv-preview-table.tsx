@@ -53,6 +53,10 @@ export function CSVPreviewTable({ rows }: CSVPreviewTableProps) {
                   <Badge variant="outline" className="text-muted-foreground">
                     Duplicate
                   </Badge>
+                ) : row.is_income ? (
+                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                    Income
+                  </Badge>
                 ) : row.needs_review ? (
                   <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">
                     Review
