@@ -4,6 +4,25 @@ import { createClient, getUser } from "@/lib/supabase/server";
 import { DEFAULT_CATEGORIES } from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 
+export async function ensureProfile() {
+  const user = await getUser();
+  if (!user) return;
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!existing) {
+    await supabase.from("profiles").insert({
+      id: user.id,
+      email: user.email,
+    });
+  }
+}
+
 export async function ensureDefaultCategories() {
   const user = await getUser();
   if (!user) return { error: "Not authenticated" };

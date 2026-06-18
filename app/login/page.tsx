@@ -23,6 +23,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,12 +34,42 @@ export default function LoginPage() {
       password,
     });
     if (error) {
-      toast.error(error.message);
+      if (error.message.toLowerCase().includes("invalid login")) {
+        toast.error(
+          "Invalid email or password. If you just signed up, check your email to confirm your account, or use Forgot password."
+        );
+      } else if (error.message.toLowerCase().includes("email not confirmed")) {
+        toast.error(
+          "Please confirm your email first — check your inbox for the Supabase confirmation link."
+        );
+      } else {
+        toast.error(error.message);
+      }
       setLoading(false);
       return;
     }
     router.push("/dashboard");
     router.refresh();
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      toast.error("Enter your email address first.");
+      return;
+    }
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/callback?next=/login`,
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Password reset email sent! Check your inbox.");
+      setResetMode(false);
+    }
+    setLoading(false);
   };
 
   return (
@@ -48,12 +79,16 @@ export default function LoginPage() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">
             <PieChart className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <CardTitle className="text-2xl">
+            {resetMode ? "Reset password" : "Welcome back"}
+          </CardTitle>
           <CardDescription>
-            Sign in to your SpendScope dashboard
+            {resetMode
+              ? "We'll email you a link to set a new password"
+              : "Sign in to your SpendScope dashboard"}
           </CardDescription>
         </CardHeader>
-        <form onSubmit={handleLogin}>
+        <form onSubmit={resetMode ? handleResetPassword : handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -66,27 +101,61 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+            {!resetMode && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password</Label>
+                  <button
+                    type="button"
+                    onClick={() => setResetMode(true)}
+                    className="text-xs font-medium text-blue-600 hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+            <Button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={loading}
+            >
+              {loading
+                ? resetMode
+                  ? "Sending…"
+                  : "Signing in…"
+                : resetMode
+                  ? "Send reset link"
+                  : "Sign in"}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link href="/signup" className="font-medium text-blue-600 hover:underline">
-                Sign up
-              </Link>
-            </p>
+            {resetMode ? (
+              <button
+                type="button"
+                onClick={() => setResetMode(false)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Back to sign in
+              </button>
+            ) : (
+              <p className="text-center text-sm text-muted-foreground">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/signup"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Sign up
+                </Link>
+              </p>
+            )}
           </CardFooter>
         </form>
       </Card>

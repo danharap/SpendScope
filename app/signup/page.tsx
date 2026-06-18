@@ -28,20 +28,47 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
+
     if (error) {
       toast.error(error.message);
       setLoading(false);
       return;
     }
-    toast.success("Account created! You can now sign in.");
+
+    // Supabase returns success for existing emails (no error) but with empty identities
+    const alreadyRegistered =
+      data.user &&
+      Array.isArray(data.user.identities) &&
+      data.user.identities.length === 0;
+
+    if (alreadyRegistered) {
+      toast.error(
+        "An account with this email already exists. Sign in instead, or use Forgot password on the login page."
+      );
+      setLoading(false);
+      return;
+    }
+
+    if (data.session) {
+      toast.success("Account created! Welcome to SpendScope.");
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    // New account — email confirmation required
+    toast.success(
+      "Account created! Check your email for a confirmation link, then sign in."
+    );
     router.push("/login");
+    setLoading(false);
   };
 
   return (
@@ -85,12 +112,19 @@ export default function SignupPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={loading}
+            >
               {loading ? "Creating account…" : "Create account"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/login" className="font-medium text-blue-600 hover:underline">
+              <Link
+                href="/login"
+                className="font-medium text-blue-600 hover:underline"
+              >
                 Sign in
               </Link>
             </p>
