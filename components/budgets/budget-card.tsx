@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils/format";
 import type { BudgetWithSpending } from "@/types/database";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle, Pencil, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HoverLift } from "@/components/design/animated";
 import Link from "next/link";
@@ -34,6 +34,7 @@ export function BudgetCard({ budget }: BudgetCardProps) {
   const percent = budget.percentUsed;
   const isOver = spent > limit;
   const category = budget.categories;
+  const isGeneral = !category;
   const status = getStatusLabel(percent, isOver);
 
   return (
@@ -46,12 +47,19 @@ export function BudgetCard({ budget }: BudgetCardProps) {
       >
         <CardHeader className="flex flex-row items-start justify-between pb-2">
           <CardTitle className="flex items-center gap-2.5 text-base font-semibold">
-            <span
-              className="h-3 w-3 rounded-full ring-2 ring-background"
-              style={{ backgroundColor: category?.color ?? "#94a3b8" }}
-              aria-hidden
-            />
-            {category?.name ?? "Category"}
+            {isGeneral ? (
+              <Wallet
+                className="h-3.5 w-3.5 text-muted-foreground"
+                aria-hidden
+              />
+            ) : (
+              <span
+                className="h-3 w-3 rounded-full ring-2 ring-background"
+                style={{ backgroundColor: category?.color ?? "#94a3b8" }}
+                aria-hidden
+              />
+            )}
+            {isGeneral ? "Overall Budget" : category?.name ?? "Category"}
           </CardTitle>
           <div className="flex items-center gap-1">
             {isOver && (

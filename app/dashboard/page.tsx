@@ -175,26 +175,37 @@ async function DashboardContent({ month }: { month: string }) {
     // -------------------------------------------------------------------------
     let budgets: BudgetWithSpending[] = [];
     if (rawBudgets.length > 0) {
-      const budgetCatIds = rawBudgets.map((b) => b.category_id);
-      const { data: budgetTx } = await supabase
-        .from("transactions")
-        .select("category_id, amount")
-        .eq("user_id", user.id)
-        .in("category_id", budgetCatIds)
-        .gte("transaction_date", start)
-        .lte("transaction_date", end)
-        .eq("is_income", false)
-        .eq("is_transfer", false);
+      const categoryBudgets = rawBudgets.filter((b) => b.category_id);
+      const hasGeneralBudget = rawBudgets.some((b) => !b.category_id);
 
+      // Fetch spending per category (for category-specific budgets)
       const spentByCat: Record<string, number> = {};
-      for (const tx of budgetTx ?? []) {
-        if (!tx.category_id) continue;
-        spentByCat[tx.category_id] =
-          (spentByCat[tx.category_id] ?? 0) + Math.abs(Number(tx.amount));
+      if (categoryBudgets.length > 0) {
+        const budgetCatIds = categoryBudgets.map((b) => b.category_id);
+        const { data: budgetTx } = await supabase
+          .from("transactions")
+          .select("category_id, amount")
+          .eq("user_id", user.id)
+          .in("category_id", budgetCatIds)
+          .gte("transaction_date", start)
+          .lte("transaction_date", end)
+          .eq("is_income", false)
+          .eq("is_transfer", false);
+
+        for (const tx of budgetTx ?? []) {
+          if (!tx.category_id) continue;
+          spentByCat[tx.category_id] =
+            (spentByCat[tx.category_id] ?? 0) + Math.abs(Number(tx.amount));
+        }
       }
 
+      // For the general budget, total spending is already in `totalSpent`
       budgets = rawBudgets.map((b) => {
-        const spent = spentByCat[b.category_id] ?? 0;
+        const spent = b.category_id
+          ? (spentByCat[b.category_id] ?? 0)
+          : hasGeneralBudget
+          ? totalSpent
+          : 0;
         const limit = Number(b.limit_amount);
         return {
           ...b,

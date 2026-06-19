@@ -83,10 +83,10 @@ async function BudgetsContent({ month }: { month: string }) {
         ) : (
           <>
             <SectionHeader
-              title="Category budgets"
+              title="Your budgets"
               description={
                 underBudget.length > 0
-                  ? `${underBudget.length} categor${underBudget.length === 1 ? "y" : "ies"} under 70% of budget`
+                  ? `${underBudget.length} budget${underBudget.length === 1 ? "" : "s"} under 70% of limit`
                   : "Monitor spending against your monthly limits"
               }
             />

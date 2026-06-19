@@ -78,7 +78,8 @@ export interface MerchantRule {
 export interface Budget {
   id: string;
   user_id: string;
-  category_id: string;
+  /** null = general (all-spending) budget */
+  category_id: string | null;
   month: string;
   limit_amount: number;
   created_at: string;
