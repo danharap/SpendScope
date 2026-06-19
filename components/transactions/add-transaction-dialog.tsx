@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { format } from "date-fns";
-import { ArrowDownLeft, ArrowUpRight, Plus } from "lucide-react";
+import { CreditCard, Landmark, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,24 +29,30 @@ import { categorizeTransaction } from "@/lib/categorization/engine";
 import { cn } from "@/lib/utils";
 import type { Account, Category } from "@/types/database";
 
-const STEPS = ["Type", "Date", "Description", "Amount", "Category"] as const;
+const STEPS = ["Account", "Date", "Description", "Amount", "Category"] as const;
 
-type TransactionType = "debit" | "credit";
+type PaymentSource = "bank" | "credit_card";
 
 interface AddTransactionDialogProps {
   accounts: Account[];
   categories: Category[];
 }
 
-function pickDefaultAccount(accounts: Account[], type: TransactionType): string {
-  if (accounts.length === 0) return "";
-  const preferred =
-    type === "debit"
-      ? accounts.find((a) => a.account_type === "credit_card") ??
-        accounts.find((a) => a.account_type === "bank")
-      : accounts.find((a) => a.account_type === "bank") ??
-        accounts.find((a) => a.account_type === "savings");
-  return preferred?.id ?? accounts[0].id;
+function accountsForSource(accounts: Account[], source: PaymentSource) {
+  const filtered = accounts.filter((a) =>
+    source === "credit_card"
+      ? a.account_type === "credit_card"
+      : a.account_type === "bank" || a.account_type === "savings"
+  );
+  return filtered.length > 0 ? filtered : accounts;
+}
+
+function pickDefaultAccount(
+  accounts: Account[],
+  source: PaymentSource
+): string {
+  const pool = accountsForSource(accounts, source);
+  return pool[0]?.id ?? accounts[0]?.id ?? "";
 }
 
 export function AddTransactionDialog({
@@ -57,9 +63,10 @@ export function AddTransactionDialog({
   const [step, setStep] = useState(1);
   const [pending, startTransition] = useTransition();
 
-  const [type, setType] = useState<TransactionType>("debit");
+  const [paymentSource, setPaymentSource] = useState<PaymentSource>("credit_card");
+  const [isIncome, setIsIncome] = useState(false);
   const [accountId, setAccountId] = useState(() =>
-    pickDefaultAccount(accounts, "debit")
+    pickDefaultAccount(accounts, "credit_card")
   );
   const [date, setDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [description, setDescription] = useState("");
@@ -81,17 +88,31 @@ export function AddTransactionDialog({
     [categories]
   );
 
-  const categoryOptions =
-    type === "credit"
-      ? categories.filter((c) =>
-          ["Income", "Refunds", "Other"].includes(c.name)
-        )
-      : spendingCategories;
+  const categoryOptions = isIncome
+    ? categories.filter((c) =>
+        ["Income", "Refunds", "Other"].includes(c.name)
+      )
+    : spendingCategories;
+
+  const selectableAccounts = useMemo(
+    () =>
+      isIncome
+        ? accounts.filter(
+            (a) => a.account_type === "bank" || a.account_type === "savings"
+          ).length > 0
+          ? accounts.filter(
+              (a) => a.account_type === "bank" || a.account_type === "savings"
+            )
+          : accounts
+        : accountsForSource(accounts, paymentSource),
+    [accounts, paymentSource, isIncome]
+  );
 
   const resetForm = () => {
     setStep(1);
-    setType("debit");
-    setAccountId(pickDefaultAccount(accounts, "debit"));
+    setPaymentSource("credit_card");
+    setIsIncome(false);
+    setAccountId(pickDefaultAccount(accounts, "credit_card"));
     setDate(format(new Date(), "yyyy-MM-dd"));
     setDescription("");
     setAmount("");
@@ -100,12 +121,23 @@ export function AddTransactionDialog({
   };
 
   useEffect(() => {
+    if (!selectableAccounts.some((a) => a.id === accountId)) {
+      setAccountId(pickDefaultAccount(accounts, paymentSource));
+    }
+  }, [paymentSource, isIncome, selectableAccounts, accountId, accounts]);
+
+  useEffect(() => {
+    setCategoryId(null);
+    setSuggestedCategory(null);
+  }, [paymentSource, isIncome]);
+
+  useEffect(() => {
     if (step !== 5 || categoryId) return;
 
     const parsed = parseFloat(amount);
     if (!description.trim() || !parsed || parsed <= 0) return;
 
-    const signed = type === "credit" ? parsed : -parsed;
+    const signed = isIncome ? parsed : -parsed;
     const result = categorizeTransaction(
       description.trim(),
       description.trim(),
@@ -114,12 +146,12 @@ export function AddTransactionDialog({
     );
     setSuggestedCategory(result.categoryId);
     setCategoryId(result.categoryId);
-  }, [step, description, amount, type, categories, categoryId]);
+  }, [step, description, amount, isIncome, categories, categoryId]);
 
   const canContinue = () => {
     switch (step) {
       case 1:
-        return !!type && !!accountId;
+        return !!accountId && (isIncome || !!paymentSource);
       case 2:
         return !!date;
       case 3:
@@ -145,7 +177,7 @@ export function AddTransactionDialog({
         transactionDate: date,
         description: description.trim(),
         amount: parsed,
-        type,
+        isIncome,
         categoryId,
       });
 
@@ -201,66 +233,72 @@ export function AddTransactionDialog({
         <div className="min-h-[180px] py-2">
           {step === 1 && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("debit");
-                    setAccountId((current) =>
-                      current || pickDefaultAccount(accounts, "debit")
-                    );
-                  }}
-                  className={cn(
-                    "flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-colors",
-                    type === "debit"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40"
-                  )}
-                >
-                  <ArrowDownLeft
+              {!isIncome ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentSource("bank");
+                      setAccountId(pickDefaultAccount(accounts, "bank"));
+                    }}
                     className={cn(
-                      "h-5 w-5",
-                      type === "debit" ? "text-primary" : "text-muted-foreground"
+                      "flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-colors",
+                      paymentSource === "bank"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
                     )}
-                    aria-hidden
-                  />
-                  <div>
-                    <p className="font-semibold">Debit</p>
-                    <p className="text-xs text-muted-foreground">
-                      Money out — purchases &amp; payments
-                    </p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setType("credit");
-                    setAccountId((current) =>
-                      pickDefaultAccount(accounts, "credit") || current
-                    );
-                  }}
-                  className={cn(
-                    "flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-colors",
-                    type === "credit"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40"
-                  )}
-                >
-                  <ArrowUpRight
+                  >
+                    <Landmark
+                      className={cn(
+                        "h-5 w-5",
+                        paymentSource === "bank"
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                      )}
+                      aria-hidden
+                    />
+                    <div>
+                      <p className="font-semibold">Bank / Debit</p>
+                      <p className="text-xs text-muted-foreground">
+                        Purchases from your bank account
+                      </p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentSource("credit_card");
+                      setAccountId(pickDefaultAccount(accounts, "credit_card"));
+                    }}
                     className={cn(
-                      "h-5 w-5",
-                      type === "credit" ? "text-primary" : "text-muted-foreground"
+                      "flex flex-col items-start gap-2 rounded-xl border-2 p-4 text-left transition-colors",
+                      paymentSource === "credit_card"
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/40"
                     )}
-                    aria-hidden
-                  />
-                  <div>
-                    <p className="font-semibold">Credit</p>
-                    <p className="text-xs text-muted-foreground">
-                      Money in — deposits &amp; refunds
-                    </p>
-                  </div>
-                </button>
-              </div>
+                  >
+                    <CreditCard
+                      className={cn(
+                        "h-5 w-5",
+                        paymentSource === "credit_card"
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                      )}
+                      aria-hidden
+                    />
+                    <div>
+                      <p className="font-semibold">Credit Card</p>
+                      <p className="text-xs text-muted-foreground">
+                        Purchases on your credit card
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              ) : (
+                <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm text-muted-foreground">
+                  Recording money received — deposit, refund, or other income.
+                </p>
+              )}
 
               <div className="space-y-2">
                 <Label>Account</Label>
@@ -274,7 +312,7 @@ export function AddTransactionDialog({
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {accounts.map((a) => (
+                    {selectableAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id} label={a.name}>
                         {a.name}
                       </SelectItem>
@@ -282,6 +320,20 @@ export function AddTransactionDialog({
                   </SelectContent>
                 </Select>
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsIncome((v) => !v);
+                  setCategoryId(null);
+                  setSuggestedCategory(null);
+                }}
+                className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                {isIncome
+                  ? "Adding a purchase instead?"
+                  : "Recording a deposit or refund instead?"}
+              </button>
             </div>
           )}
 
@@ -327,7 +379,7 @@ export function AddTransactionDialog({
                 autoFocus
               />
               <p className="text-xs text-muted-foreground">
-                Enter the positive amount — we&apos;ll apply debit/credit for you
+                Enter the purchase amount (e.g. 59.90)
               </p>
             </div>
           )}
@@ -337,7 +389,7 @@ export function AddTransactionDialog({
               <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
                 <p className="font-medium">{description}</p>
                 <p className="mt-1 text-muted-foreground">
-                  {date} · {type === "debit" ? "−" : "+"}$
+                  {date} · {isIncome ? "+" : "−"}$
                   {parseFloat(amount || "0").toFixed(2)} ·{" "}
                   {selectedAccount?.name}
                 </p>

@@ -339,7 +339,8 @@ export async function createManualTransaction(input: {
   transactionDate: string;
   description: string;
   amount: number;
-  type: "debit" | "credit";
+  /** True for deposits/refunds; false for purchases (bank or credit card). */
+  isIncome?: boolean;
   categoryId: string | null;
 }) {
   try {
@@ -366,7 +367,7 @@ export async function createManualTransaction(input: {
 
     if (!account) return { error: "Account not found" };
 
-    const isIncome = input.type === "credit";
+    const isIncome = input.isIncome === true;
     const signedAmount = isIncome
       ? Math.abs(input.amount)
       : -Math.abs(input.amount);
