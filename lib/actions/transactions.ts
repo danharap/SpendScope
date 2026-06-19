@@ -7,7 +7,12 @@ import type { NormalizedTransaction } from "@/types/transaction";
 import type { TransactionWithRelations, TransactionAnalyticsRow } from "@/types/database";
 import { getMonthRange } from "@/lib/utils/format";
 import { revalidatePath } from "next/cache";
-import { normalizeDescription } from "@/lib/csv/dedupe";
+import {
+  extractMerchantName,
+  generateDedupeKey,
+  normalizeDescription,
+} from "@/lib/csv/dedupe";
+import { categorizeTransaction } from "@/lib/categorization/engine";
 
 const DEDUPE_CHUNK_SIZE = 200;
 const PAGE_SIZE = 1000;
@@ -163,6 +168,34 @@ async function fetchExistingDedupeKeys(
   return existing;
 }
 
+/** Match on date + signed amount + normalized description (any account). */
+async function fetchExistingTransactionFingerprints(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("transaction_date, amount, description_raw")
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+
+  return new Set(
+    (data ?? []).map(
+      (tx) =>
+        `${tx.transaction_date}|${Number(tx.amount).toFixed(2)}|${normalizeDescription(tx.description_raw)}`
+    )
+  );
+}
+
+function transactionFingerprint(
+  date: string,
+  amount: number,
+  description: string
+): string {
+  return `${date}|${amount.toFixed(2)}|${normalizeDescription(description)}`;
+}
+
 export async function getExistingDedupeKeys(): Promise<Set<string>> {
   const user = await getUser();
   if (!user) return new Set();
@@ -214,15 +247,29 @@ export async function importTransactions(params: {
     }
 
     let existingKeys = new Set<string>();
+    let existingFingerprints = new Set<string>();
     if (unique.length > 0) {
-      existingKeys = await fetchExistingDedupeKeys(
-        supabase,
-        user.id,
-        unique.map((t) => t.dedupe_key)
-      );
+      [existingKeys, existingFingerprints] = await Promise.all([
+        fetchExistingDedupeKeys(
+          supabase,
+          user.id,
+          unique.map((t) => t.dedupe_key)
+        ),
+        fetchExistingTransactionFingerprints(supabase, user.id),
+      ]);
     }
 
-    const newTransactions = unique.filter((t) => !existingKeys.has(t.dedupe_key));
+    const newTransactions = unique.filter((t) => {
+      if (existingKeys.has(t.dedupe_key)) return false;
+      const fingerprint = transactionFingerprint(
+        t.transaction_date,
+        t.amount,
+        t.description_raw
+      );
+      if (existingFingerprints.has(fingerprint)) return false;
+      existingFingerprints.add(fingerprint);
+      return true;
+    });
 
     const { data: importRecord, error: importError } = await supabase
       .from("imports")
@@ -283,6 +330,134 @@ export async function importTransactions(params: {
   } catch (e) {
     return {
       error: e instanceof Error ? e.message : "Import failed unexpectedly",
+    };
+  }
+}
+
+export async function createManualTransaction(input: {
+  accountId: string;
+  transactionDate: string;
+  description: string;
+  amount: number;
+  type: "debit" | "credit";
+  categoryId: string | null;
+}) {
+  try {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
+
+    const description = input.description.trim();
+    if (!description) return { error: "Description is required" };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.transactionDate)) {
+      return { error: "Invalid date" };
+    }
+    if (!input.amount || input.amount <= 0) {
+      return { error: "Amount must be greater than zero" };
+    }
+
+    const supabase = await createClient();
+
+    const { data: account } = await supabase
+      .from("accounts")
+      .select("id")
+      .eq("id", input.accountId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!account) return { error: "Account not found" };
+
+    const isIncome = input.type === "credit";
+    const signedAmount = isIncome
+      ? Math.abs(input.amount)
+      : -Math.abs(input.amount);
+
+    await ensureDefaultCategories();
+    const [categories, merchantRules] = await Promise.all([
+      getCategories(),
+      getMerchantRules(),
+    ]);
+
+    const merchantName = extractMerchantName(description);
+
+    let categoryId = input.categoryId;
+    let needsReview = false;
+
+    if (!categoryId) {
+      const result = categorizeTransaction(
+        description,
+        merchantName,
+        signedAmount,
+        categories,
+        merchantRules
+      );
+      categoryId = result.categoryId;
+      needsReview = result.needsReview;
+    }
+
+    const dedupeKey = generateDedupeKey(
+      input.transactionDate,
+      description,
+      signedAmount,
+      input.accountId
+    );
+
+    const existingKeys = await fetchExistingDedupeKeys(supabase, user.id, [
+      dedupeKey,
+    ]);
+    if (existingKeys.has(dedupeKey)) {
+      return {
+        error: "duplicate",
+        message:
+          "This transaction is already recorded (same date, amount, and description).",
+      };
+    }
+
+    const fingerprint = transactionFingerprint(
+      input.transactionDate,
+      signedAmount,
+      description
+    );
+    const existingFingerprints = await fetchExistingTransactionFingerprints(
+      supabase,
+      user.id
+    );
+    if (existingFingerprints.has(fingerprint)) {
+      return {
+        error: "duplicate",
+        message:
+          "A transaction with the same date, amount, and description already exists.",
+      };
+    }
+
+    const { error } = await supabase.from("transactions").insert({
+      user_id: user.id,
+      account_id: input.accountId,
+      import_id: null,
+      transaction_date: input.transactionDate,
+      description_raw: description,
+      merchant_name: merchantName,
+      amount: signedAmount,
+      currency: "CAD",
+      category_id: categoryId,
+      subcategory: null,
+      transaction_type: isIncome ? "credit" : "debit",
+      is_income: isIncome,
+      is_transfer: false,
+      is_subscription: false,
+      needs_review: needsReview,
+      dedupe_key: dedupeKey,
+    });
+
+    if (error) return { error: error.message };
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/insights");
+
+    return { success: true };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Failed to add transaction",
     };
   }
 }

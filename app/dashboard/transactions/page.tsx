@@ -3,6 +3,7 @@ import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { TransactionFilters } from "@/components/transactions/transaction-filters";
 import { RecategorizeButton } from "@/components/transactions/recategorize-button";
+import { AddTransactionDialog } from "@/components/transactions/add-transaction-dialog";
 import { PageContainer } from "@/components/design/page-container";
 import { Card } from "@/components/ui/card";
 import { getCategories, getAccounts } from "@/lib/actions/accounts";
@@ -49,13 +50,14 @@ async function TransactionsContent({ params }: { params: SearchParams }) {
     <>
       <DashboardHeader
         title="Transactions"
-        description={`${transactions.length.toLocaleString()} transactions from your uploaded CSV files`}
+        description={`${transactions.length.toLocaleString()} transactions — upload a CSV or add manually`}
         showMonthSelector={false}
         months={[]}
         showUploadButton
       />
       <PageContainer>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <AddTransactionDialog accounts={accounts} categories={categories} />
           <RecategorizeButton
             needsReviewOnly={params.needsReview === "true"}
             className="sm:order-2"
