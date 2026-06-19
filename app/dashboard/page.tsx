@@ -46,6 +46,26 @@ interface DashboardPageProps {
 }
 
 async function DashboardContent({ month }: { month: string }) {
+  try {
+    return await DashboardContentInner({ month });
+  } catch (err) {
+    console.error("[dashboard] DashboardContent threw:", err);
+    return (
+      <PageContainer>
+        <Card className="border-rose-500/30 bg-rose-500/10">
+          <CardContent className="p-6 text-center">
+            <p className="font-semibold text-rose-300">Dashboard failed to load.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {err instanceof Error ? err.message : "Unknown error"}
+            </p>
+          </CardContent>
+        </Card>
+      </PageContainer>
+    );
+  }
+}
+
+async function DashboardContentInner({ month }: { month: string }) {
   const [categories, months, budgets, budgetPrefs, recentTransactions] =
     await Promise.all([
       getCategories().catch(() => [] as Awaited<ReturnType<typeof getCategories>>),

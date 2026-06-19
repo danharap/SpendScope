@@ -1,5 +1,3 @@
-"use server";
-
 import { createClient, getUser } from "@/lib/supabase/server";
 import { getMonthRange, getPreviousMonth } from "@/lib/utils/format";
 import type { Category, TransactionWithRelations } from "@/types/database";
