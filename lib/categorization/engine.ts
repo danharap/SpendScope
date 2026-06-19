@@ -161,9 +161,10 @@ export function categorizeTransaction(
       });
     }
 
+    // Unrecognized deposit — assume income rather than flagging for review
     return buildResult(categories, "Income", merchantName, {
       isIncome: true,
-      needsReview: true,
+      needsReview: false,
     });
   }
 
@@ -239,18 +240,11 @@ export function categorizeTransaction(
     );
   }
 
-  // Unknown — needs review
-  const reviewCat = findCategoryByName(categories, "Needs Review");
-  return {
-    categoryId: reviewCat?.id ?? null,
-    categoryName: reviewCat?.name ?? "Needs Review",
-    subcategory: null,
-    merchantName,
-    isIncome: false,
-    isTransfer: false,
-    isSubscription: false,
-    needsReview: true,
-  };
+  // Unknown — default to Other rather than leaving transactions flagged for review.
+  // The user can always re-categorize manually or run bulk recategorization.
+  return buildResult(categories, "Other", merchantName, {
+    needsReview: false,
+  });
 }
 
 export function getCategoryName(

@@ -4,14 +4,11 @@ import { createClient, getUser } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { BudgetOverview } from "@/components/dashboard/budget-overview";
-import { SpendingByCategoryChart } from "@/components/charts/spending-by-category-chart";
-import { TransactionsTable } from "@/components/transactions/transactions-table";
+import { CategoryDrilldown } from "@/components/dashboard/category-drilldown";
 import { PageContainer } from "@/components/design/page-container";
 import { EmptyState } from "@/components/design/empty-state";
-import { SectionHeader } from "@/components/design/section-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 import { DollarSign, Utensils, Wallet, AlertCircle, Upload } from "lucide-react";
 import type { Category, BudgetWithSpending, TransactionWithRelations } from "@/types/database";
@@ -214,7 +211,8 @@ async function DashboardContent({ month }: { month: string }) {
     );
 
     // -------------------------------------------------------------------------
-    // Recent transactions (with relations for the table)
+    // Transactions for this month (with full relations for chart drill-down)
+    // Load up to 200 — enough for the monthly view without over-fetching
     // -------------------------------------------------------------------------
     const { data: recentData } = await supabase
       .from("transactions")
@@ -223,7 +221,7 @@ async function DashboardContent({ month }: { month: string }) {
       .gte("transaction_date", start)
       .lte("transaction_date", end)
       .order("transaction_date", { ascending: false })
-      .limit(10);
+      .limit(200);
     const recentTransactions = (recentData ?? []) as TransactionWithRelations[];
 
     // -------------------------------------------------------------------------
@@ -302,34 +300,12 @@ async function DashboardContent({ month }: { month: string }) {
           {/* Budgets */}
           <BudgetOverview budgets={budgets} month={month} />
 
-          {/* Spending by category */}
-          {spendingByCategory.length > 0 && (
-            <SpendingByCategoryChart data={spendingByCategory} />
-          )}
-
-          {/* Recent transactions */}
-          <Card className="card-premium overflow-hidden">
-            <SectionHeader
-              title="Recent transactions"
-              description="Latest activity from your uploaded CSV files"
-              className="border-b border-border/60 px-6 py-5"
-              action={
-                <Link
-                  href="/dashboard/transactions"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
-                >
-                  View all
-                </Link>
-              }
-            />
-            <CardContent className="p-0">
-              <TransactionsTable
-                transactions={recentTransactions}
-                categories={categories}
-                compact
-              />
-            </CardContent>
-          </Card>
+          {/* Pie chart + clickable transaction drill-down */}
+          <CategoryDrilldown
+            spendingByCategory={spendingByCategory}
+            transactions={recentTransactions}
+            categories={categories}
+          />
         </PageContainer>
       </>
     );
