@@ -5,6 +5,7 @@ import {
   HEURISTIC_CATEGORY_PATTERNS,
   INCOME_KEYWORDS,
   LEGACY_CATEGORY_ALIASES,
+  PRIORITY_CATEGORY_MATCHES,
   SUBSCRIPTION_KEYWORDS,
   TRANSFER_KEYWORDS,
 } from "@/lib/categorization/rules";
@@ -64,6 +65,21 @@ function matchHeuristicCategory(
 ): Category | undefined {
   const haystack = texts.join(" ");
   for (const { category, patterns } of HEURISTIC_CATEGORY_PATTERNS) {
+    if (patterns.some((pattern) => pattern.test(haystack))) {
+      const cat = findCategoryByName(categories, category);
+      if (cat) return cat;
+    }
+  }
+  return undefined;
+}
+
+function matchPriorityCategory(
+  texts: string[],
+  categories: Category[]
+): Category | undefined {
+  const haystack = texts.join(" ");
+  for (const { category, patterns, unless } of PRIORITY_CATEGORY_MATCHES) {
+    if (unless?.some((pattern) => pattern.test(haystack))) continue;
     if (patterns.some((pattern) => pattern.test(haystack))) {
       const cat = findCategoryByName(categories, category);
       if (cat) return cat;
@@ -203,6 +219,16 @@ export function categorizeTransaction(
       isTransfer: true,
       needsReview: false,
     });
+  }
+
+  // Priority merchant disambiguation (Uber Eats vs Uber ride, Shoppers, etc.)
+  const priorityCat = matchPriorityCategory(searchTexts, categories);
+  if (priorityCat) {
+    let result = buildResult(categories, priorityCat.name, merchantName, {
+      needsReview: false,
+    });
+    result = applySubscriptionOverride(categories, result, searchTexts);
+    return result;
   }
 
   // Ordered keyword rules

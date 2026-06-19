@@ -151,6 +151,9 @@ export const CATEGORY_KEYWORD_RULES: { category: string; keywords: string[] }[] 
         "KELSEYS",
         "MONTANA",
         "UBER EATS",
+        "UBEREATS",
+        "UBER*EATS",
+        "UBER EATS CANADA",
         "DOORDASH",
         "SKIPTHEDISHES",
         "SKIP THE DISHES",
@@ -387,8 +390,6 @@ export const CATEGORY_KEYWORD_RULES: { category: string; keywords: string[] }[] 
     {
       category: "Pharmacy",
       keywords: [
-        "SHOPPERS DRUG",
-        "SHOPPERS DRUG MART",
         "REXALL",
         "PHARMA PLUS",
         "PHARMAPLUS",
@@ -423,6 +424,7 @@ export const CATEGORY_KEYWORD_RULES: { category: string; keywords: string[] }[] 
       keywords: [
         "UBER TRIP",
         "UBER*TRIP",
+        "HELP.UBER.COM",
         "LYFT",
         "PRESTO",
         "GO TRANSIT",
@@ -578,6 +580,12 @@ export const CATEGORY_KEYWORD_RULES: { category: string; keywords: string[] }[] 
     {
       category: "Health",
       keywords: [
+        "SHOPPERS",
+        "SHOPPERS DRUG",
+        "SHOPPERS DRUG MART",
+        "SHOPPERSDRUGMART",
+        "SHOPPER DRUG MART",
+        "SDM ",
         "DENTIST",
         "DENTAL",
         "DOCTOR",
@@ -740,6 +748,47 @@ export const SUBSCRIPTION_KEYWORDS =
 export const TRANSFER_KEYWORDS =
   CATEGORY_KEYWORD_RULES.find((r) => r.category === "Transfers")?.keywords ??
   [];
+
+/**
+ * High-priority merchant disambiguation — checked before generic keyword rules.
+ * Use for merchants that share prefixes (e.g. Uber vs Uber Eats) or need
+ * a category override (e.g. Shoppers Drug Mart → Health).
+ */
+export const PRIORITY_CATEGORY_MATCHES: {
+  category: string;
+  patterns: RegExp[];
+  /** If any unless pattern matches, skip this rule */
+  unless?: RegExp[];
+}[] = [
+  {
+    category: "Fast Food & Delivery",
+    patterns: [
+      /\bUBER\s*[\*]?\s*EATS\b/,
+      /\bUBEREATS\b/,
+      /\bUE\s*[\*]?\s*EATS\b/,
+    ],
+  },
+  {
+    category: "Transportation",
+    patterns: [
+      /\bUBER\s*[\*]?\s*TRIP\b/,
+      /\bUBERTRIP\b/,
+      /\bUBER\s+CANADA\b/,
+      /\bHELP\.UBER\.COM\b/,
+      /\bLYFT\b/,
+    ],
+    unless: [/\bUBER\s*[\*]?\s*EATS\b/, /\bUBEREATS\b/],
+  },
+  {
+    category: "Health",
+    patterns: [
+      /\bSHOPPERS\b/,
+      /\bSHOPPER\s*DRUG\b/,
+      /\bSHOPPERSDRUG\b/,
+      /\bSDM\b/,
+    ],
+  },
+];
 
 /** Heuristic patterns when no keyword rule matches (checked in order). */
 export const HEURISTIC_CATEGORY_PATTERNS: {
