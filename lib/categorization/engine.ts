@@ -240,8 +240,21 @@ export function categorizeTransaction(
     );
   }
 
-  // Unknown — default to Other rather than leaving transactions flagged for review.
-  // The user can always re-categorize manually or run bulk recategorization.
+  // Amount-based food heuristic — last resort before "Other".
+  // When nothing else matches, small-ticket transactions fall almost
+  // exclusively into food/drink in practice. The user can always correct
+  // individual items or re-run bulk recategorization.
+  const absAmount = Math.abs(amount);
+  if (absAmount >= 2 && absAmount < 7) {
+    // Typical coffee / tea / small snack range
+    return buildResult(categories, "Coffee", merchantName, { needsReview: false });
+  }
+  if (absAmount >= 7 && absAmount <= 60) {
+    // Typical meal / takeout range — covers restaurants the keyword rules don't know
+    return buildResult(categories, "Restaurants", merchantName, { needsReview: false });
+  }
+
+  // Unknown — default to Other
   return buildResult(categories, "Other", merchantName, {
     needsReview: false,
   });
