@@ -25,18 +25,19 @@ import {
   Repeat,
   Store,
 } from "lucide-react";
-import { loadDashboardPageData } from "@/lib/actions/dashboard-data";
+import { getCategories } from "@/lib/actions/accounts";
 import {
-  computeDashboardStats,
-  computeBudgetRemaining,
-  getCurrentMonth,
-} from "@/lib/analytics/dashboard";
-import {
-  computeIncomeSpendingStats,
-  getWeekRange,
-} from "@/lib/analytics/income-budget";
+  getDashboardStats,
+  getDashboardBudgets,
+  getDashboardBudgetPrefs,
+  getRecentTransactionsForDashboard,
+  getDistinctMonthsForDashboard,
+} from "@/lib/actions/dashboard";
+import { computeBudgetRemaining, getCurrentMonth } from "@/lib/analytics/dashboard";
 import { IncomeSpendingOverview } from "@/components/dashboard/income-spending-overview";
 import { formatCurrency, formatPercent, parseDashboardMonth } from "@/lib/utils/format";
+import { getWeekRange } from "@/lib/analytics/income-budget";
+import type { IncomeSpendingStats } from "@/lib/analytics/income-budget";
 
 export const maxDuration = 60;
 
@@ -45,41 +46,82 @@ interface DashboardPageProps {
 }
 
 async function DashboardContent({ month }: { month: string }) {
-  const {
-    categories,
-    analyticsRows,
-    budgets,
-    budgetPrefs,
-    recentTransactions,
-    loadErrors,
-  } = await loadDashboardPageData(month);
+  const [categories, months, budgets, budgetPrefs, recentTransactions] =
+    await Promise.all([
+      getCategories().catch(() => [] as Awaited<ReturnType<typeof getCategories>>),
+      getDistinctMonthsForDashboard().catch(() => [] as string[]),
+      getDashboardBudgets(month).catch(() => [] as Awaited<ReturnType<typeof getDashboardBudgets>>),
+      getDashboardBudgetPrefs().catch(() => ({
+        weeklySpendingLimit: 200,
+        hourlyRate: 30,
+        hoursPerWeek: 40,
+        payFrequency: "biweekly" as const,
+      })),
+      getRecentTransactionsForDashboard(month).catch(
+        () => [] as Awaited<ReturnType<typeof getRecentTransactionsForDashboard>>
+      ),
+    ]);
+
+  const stats = await getDashboardStats(month, categories).catch(() => ({
+    totalSpent: 0,
+    prevMonthSpent: 0,
+    monthOverMonthChange: 0,
+    foodSpent: 0,
+    groceriesSpent: 0,
+    subscriptionsSpent: 0,
+    needsReviewCount: 0,
+    topMerchants: [] as { name: string; total: number }[],
+    spendingByCategory: [] as { name: string; total: number; color: string }[],
+    monthlySpending: [] as { month: string; total: number }[],
+    foodTrend: [] as { month: string; total: number }[],
+    subscriptionItems: [] as { name: string; total: number; count: number }[],
+    weeklySpent: 0,
+    prevWeekSpent: 0,
+    monthIncome: 0,
+    incomeDeposits: [] as { date: string; amount: number; merchant: string }[],
+  }));
 
   const budgetRemaining = computeBudgetRemaining(budgets);
-  const stats = computeDashboardStats(
-    analyticsRows,
-    categories,
-    month,
-    budgetRemaining
-  );
-  const incomeStats = computeIncomeSpendingStats(
-    analyticsRows,
-    month,
-    budgetPrefs
-  );
   const weekLabel = getWeekRange().label;
 
-  const months = [
-    ...new Set(
-      analyticsRows
-        .map((t) => t.transaction_date?.slice(0, 7))
-        .filter((m): m is string => Boolean(m))
-    ),
-  ].sort();
-  if (!months.includes(month)) months.push(month);
-  months.sort();
+  const allMonths = [...months];
+  if (!allMonths.includes(month)) allMonths.push(month);
+  allMonths.sort();
 
-  const hasData = analyticsRows.length > 0;
+  const weeklyLimit = budgetPrefs.weeklySpendingLimit;
+  const weeklyRemaining = weeklyLimit - stats.weeklySpent;
+  const weekOverWeekChange =
+    stats.prevWeekSpent > 0
+      ? ((stats.weeklySpent - stats.prevWeekSpent) / stats.prevWeekSpent) * 100
+      : 0;
+
+  const estimatedPayPerPeriod = (() => {
+    const gross = budgetPrefs.hourlyRate * budgetPrefs.hoursPerWeek;
+    const net = gross * 0.75;
+    if (budgetPrefs.payFrequency === "weekly") return net;
+    if (budgetPrefs.payFrequency === "monthly") return net * (52 / 12);
+    return net * 2;
+  })();
+
+  const incomeStats: IncomeSpendingStats = {
+    weeklySpent: stats.weeklySpent,
+    weeklyLimit,
+    weeklyRemaining,
+    weeklyPercentUsed: weeklyLimit > 0 ? (stats.weeklySpent / weeklyLimit) * 100 : 0,
+    weeklyOverBudget: stats.weeklySpent > weeklyLimit,
+    prevWeekSpent: stats.prevWeekSpent,
+    weekOverWeekChange,
+    monthIncome: stats.monthIncome,
+    monthSpending: stats.totalSpent,
+    monthNet: stats.monthIncome - stats.totalSpent,
+    estimatedPayPerPeriod,
+    estimatedMonthlyIncome: estimatedPayPerPeriod * (budgetPrefs.payFrequency === "biweekly" ? 26 / 12 : 1),
+    incomeDeposits: stats.incomeDeposits,
+    suggestions: [],
+  };
+
   const topMerchant = stats.topMerchants[0];
+  const hasData = allMonths.length > 1 || recentTransactions.length > 0 || stats.totalSpent > 0 || stats.needsReviewCount > 0;
 
   if (!hasData) {
     return (
@@ -93,13 +135,6 @@ async function DashboardContent({ month }: { month: string }) {
           showUploadButton
         />
         <PageContainer>
-          {loadErrors.length > 0 && (
-            <Card className="mb-4 border-amber-500/30 bg-amber-500/10">
-              <CardContent className="p-4 text-sm text-amber-200">
-                Some dashboard data could not be loaded. Try reloading the page.
-              </CardContent>
-            </Card>
-          )}
           <EmptyState
             icon={Upload}
             title="No transactions yet"
@@ -117,19 +152,11 @@ async function DashboardContent({ month }: { month: string }) {
       <DashboardHeader
         title="Spending Dashboard"
         description="Track your spending, budgets, and monthly habits from uploaded CSV transactions."
-        months={months}
+        months={allMonths}
         showCsvBadge
         showUploadButton
       />
       <PageContainer>
-        {loadErrors.length > 0 && (
-          <Card className="mb-4 border-amber-500/30 bg-amber-500/10">
-            <CardContent className="p-4 text-sm text-amber-200">
-              Some sections may be incomplete. Try reloading the page.
-            </CardContent>
-          </Card>
-        )}
-
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <StatCard
             title="Total Spent This Month"
@@ -150,7 +177,7 @@ async function DashboardContent({ month }: { month: string }) {
           />
           <StatCard
             title="Budget Remaining"
-            value={formatCurrency(stats.budgetRemaining)}
+            value={formatCurrency(budgetRemaining)}
             icon={Wallet}
             variant="success"
           />
