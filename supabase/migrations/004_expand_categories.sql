@@ -1,5 +1,5 @@
--- Expand default category catalog and add merged fast-food category.
--- Safe to run multiple times (inserts skip existing names).
+-- Expand default category catalog (run once in Supabase SQL editor).
+-- Safe to re-run: skips names that already exist.
 
 insert into public.categories (name, color, icon, is_default, user_id)
 select v.name, v.color, v.icon, true, null
@@ -19,7 +19,7 @@ where not exists (
   where c.is_default = true and c.name = v.name
 );
 
--- Migrate transactions from legacy categories to merged name when both exist.
+-- Merge legacy fast-food categories into the combined default (all users).
 update public.transactions t
 set category_id = target.id
 from public.categories legacy
@@ -38,4 +38,14 @@ join public.categories target
 where legacy.is_default = true
   and legacy.name in ('Fast Food', 'Food Delivery')
   and b.category_id = legacy.id
+  and legacy.id <> target.id;
+
+update public.merchant_rules m
+set category_id = target.id
+from public.categories legacy
+join public.categories target
+  on target.is_default = true and target.name = 'Fast Food & Delivery'
+where legacy.is_default = true
+  and legacy.name in ('Fast Food', 'Food Delivery')
+  and m.category_id = legacy.id
   and legacy.id <> target.id;

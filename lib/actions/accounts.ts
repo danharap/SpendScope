@@ -1,11 +1,7 @@
 "use server";
 
 import { createClient, getUser } from "@/lib/supabase/server";
-import {
-  DEFAULT_CATEGORIES,
-  MERGED_LEGACY_CATEGORIES,
-} from "@/lib/constants";
-import { revalidatePath } from "next/cache";
+import { DEFAULT_CATEGORIES } from "@/lib/constants";
 
 export async function ensureProfile() {
   const user = await getUser();
@@ -26,77 +22,11 @@ export async function ensureProfile() {
   }
 }
 
-async function mergeLegacyDefaultCategories(
-  supabase: Awaited<ReturnType<typeof createClient>>
-) {
-  const { data: defaults } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("is_default", true);
-
-  if (!defaults?.length) return;
-
-  for (const [legacyName, targetName] of Object.entries(
-    MERGED_LEGACY_CATEGORIES
-  )) {
-    const source = defaults.find((c) => c.name === legacyName);
-    const target = defaults.find((c) => c.name === targetName);
-    if (!source || !target || source.id === target.id) continue;
-
-    await supabase
-      .from("transactions")
-      .update({ category_id: target.id })
-      .eq("category_id", source.id);
-
-    await supabase
-      .from("budgets")
-      .update({ category_id: target.id })
-      .eq("category_id", source.id);
-
-    await supabase
-      .from("merchant_rules")
-      .update({ category_id: target.id })
-      .eq("category_id", source.id);
-  }
-}
-
+/**
+ * Default categories are seeded via Supabase migrations (service role).
+ * Client requests must not bulk-update transactions on every page load.
+ */
 export async function ensureDefaultCategories() {
-  const supabase = await createClient();
-
-  const { data: existingDefaults } = await supabase
-    .from("categories")
-    .select("name")
-    .eq("is_default", true);
-
-  const existingNames = new Set(existingDefaults?.map((c) => c.name) ?? []);
-
-  if (existingNames.size === 0) {
-    await supabase.from("categories").insert(
-      DEFAULT_CATEGORIES.map((c) => ({
-        name: c.name,
-        color: c.color,
-        icon: c.icon,
-        is_default: true,
-        user_id: null,
-      }))
-    );
-  } else {
-    const missing = DEFAULT_CATEGORIES.filter((c) => !existingNames.has(c.name));
-    if (missing.length > 0) {
-      await supabase.from("categories").insert(
-        missing.map((c) => ({
-          name: c.name,
-          color: c.color,
-          icon: c.icon,
-          is_default: true,
-          user_id: null,
-        }))
-      );
-    }
-  }
-
-  await mergeLegacyDefaultCategories(supabase);
-
   return { success: true };
 }
 
@@ -105,15 +35,25 @@ export async function getCategories() {
   if (!user) return [];
 
   const supabase = await createClient();
-  await ensureDefaultCategories();
-
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("categories")
     .select("*")
     .or(`is_default.eq.true,user_id.eq.${user.id}`)
     .order("name");
 
+  if (error) {
+    console.error("getCategories failed:", error.message);
+    return [];
+  }
+
   return data ?? [];
+}
+
+/** Names from migrations; used to warn if catalog is stale. */
+export async function getMissingDefaultCategoryNames(): Promise<string[]> {
+  const categories = await getCategories();
+  const names = new Set(categories.map((c) => c.name));
+  return DEFAULT_CATEGORIES.map((c) => c.name).filter((name) => !names.has(name));
 }
 
 export async function getAccounts() {
@@ -151,7 +91,6 @@ export async function createAccount(
     .single();
 
   if (error) return { error: error.message };
-  revalidatePath("/dashboard");
   return { data };
 }
 

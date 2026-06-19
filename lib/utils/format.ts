@@ -43,10 +43,23 @@ export function getCurrentMonth(): string {
   return format(new Date(), "yyyy-MM");
 }
 
+/** Validate ?month= query param; fall back to current month. */
+export function parseDashboardMonth(month?: string | null): string {
+  const current = getCurrentMonth();
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) return current;
+  const [, m] = month.split("-").map(Number);
+  if (!m || m < 1 || m > 12) return current;
+  return month;
+}
+
 export function getMonthRange(month: string): { start: string; end: string } {
-  const [year, m] = month.split("-").map(Number);
+  const safeMonth = parseDashboardMonth(month);
+  const [year, m] = safeMonth.split("-").map(Number);
   const start = new Date(year, m - 1, 1);
   const end = new Date(year, m, 0);
+  if (!isValid(start) || !isValid(end)) {
+    return getMonthRange(getCurrentMonth());
+  }
   return {
     start: format(start, "yyyy-MM-dd"),
     end: format(end, "yyyy-MM-dd"),

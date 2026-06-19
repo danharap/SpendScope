@@ -66,46 +66,59 @@ async function fetchAllTransactionPages<T>(
   select: string,
   filters?: TransactionFilters
 ): Promise<T[]> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  if (filters?.limit) {
-    const { data, error } = await applyTransactionFilters(
-      supabase.from("transactions"),
-      userId,
-      select,
-      filters
-    ).limit(filters.limit);
-    if (error) throw new Error(error.message);
-    return (data ?? []) as T[];
-  }
+    if (filters?.limit) {
+      const { data, error } = await applyTransactionFilters(
+        supabase.from("transactions"),
+        userId,
+        select,
+        filters
+      ).limit(filters.limit);
+      if (error) {
+        console.error("fetchAllTransactionPages(limit):", error.message);
+        return [];
+      }
+      return (data ?? []) as T[];
+    }
 
-  const { count, error: countError } = await supabase
-    .from("transactions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    const { count, error: countError } = await supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
 
-  if (countError) throw new Error(countError.message);
-  if (!count) return [];
+    if (countError) {
+      console.error("fetchAllTransactionPages(count):", countError.message);
+      return [];
+    }
+    if (!count) return [];
 
-  const pageCount = Math.ceil(count / PAGE_SIZE);
-  const pages = await Promise.all(
-    Array.from({ length: pageCount }, (_, pageIndex) => {
+    const pageCount = Math.ceil(count / PAGE_SIZE);
+    const all: T[] = [];
+
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
       const from = pageIndex * PAGE_SIZE;
-      return applyTransactionFilters(
+      const { data, error } = await applyTransactionFilters(
         supabase.from("transactions"),
         userId,
         select,
         filters
       ).range(from, from + PAGE_SIZE - 1);
-    })
-  );
 
-  const all: T[] = [];
-  for (const { data, error } of pages) {
-    if (error) throw new Error(error.message);
-    if (data?.length) all.push(...(data as T[]));
+      if (error) {
+        console.error("fetchAllTransactionPages(page):", error.message);
+        break;
+      }
+      if (data?.length) all.push(...(data as T[]));
+      if (!data?.length || data.length < PAGE_SIZE) break;
+    }
+
+    return all;
+  } catch (e) {
+    console.error("fetchAllTransactionPages:", e);
+    return [];
   }
-  return all;
 }
 
 export async function getTransactionsForAnalytics(): Promise<

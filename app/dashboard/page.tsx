@@ -25,13 +25,7 @@ import {
   Repeat,
   Store,
 } from "lucide-react";
-import { getCategories } from "@/lib/actions/accounts";
-import {
-  getRecentTransactions,
-  getTransactionsForAnalytics,
-} from "@/lib/actions/transactions";
-import { getBudgets } from "@/lib/actions/budgets";
-import { getBudgetPreferences } from "@/lib/actions/settings";
+import { loadDashboardPageData } from "@/lib/actions/dashboard-data";
 import {
   computeDashboardStats,
   computeBudgetRemaining,
@@ -42,7 +36,7 @@ import {
   getWeekRange,
 } from "@/lib/analytics/income-budget";
 import { IncomeSpendingOverview } from "@/components/dashboard/income-spending-overview";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { formatCurrency, formatPercent, parseDashboardMonth } from "@/lib/utils/format";
 
 export const maxDuration = 60;
 
@@ -51,14 +45,14 @@ interface DashboardPageProps {
 }
 
 async function DashboardContent({ month }: { month: string }) {
-  const [categories, analyticsRows, budgets, budgetPrefs, recentTransactions] =
-    await Promise.all([
-      getCategories(),
-      getTransactionsForAnalytics(),
-      getBudgets(month),
-      getBudgetPreferences(),
-      getRecentTransactions(month, 10),
-    ]);
+  const {
+    categories,
+    analyticsRows,
+    budgets,
+    budgetPrefs,
+    recentTransactions,
+    loadErrors,
+  } = await loadDashboardPageData(month);
 
   const budgetRemaining = computeBudgetRemaining(budgets);
   const stats = computeDashboardStats(
@@ -75,7 +69,11 @@ async function DashboardContent({ month }: { month: string }) {
   const weekLabel = getWeekRange().label;
 
   const months = [
-    ...new Set(analyticsRows.map((t) => t.transaction_date.slice(0, 7))),
+    ...new Set(
+      analyticsRows
+        .map((t) => t.transaction_date?.slice(0, 7))
+        .filter((m): m is string => Boolean(m))
+    ),
   ].sort();
   if (!months.includes(month)) months.push(month);
   months.sort();
@@ -95,6 +93,13 @@ async function DashboardContent({ month }: { month: string }) {
           showUploadButton
         />
         <PageContainer>
+          {loadErrors.length > 0 && (
+            <Card className="mb-4 border-amber-500/30 bg-amber-500/10">
+              <CardContent className="p-4 text-sm text-amber-200">
+                Some dashboard data could not be loaded. Try reloading the page.
+              </CardContent>
+            </Card>
+          )}
           <EmptyState
             icon={Upload}
             title="No transactions yet"
@@ -117,6 +122,14 @@ async function DashboardContent({ month }: { month: string }) {
         showUploadButton
       />
       <PageContainer>
+        {loadErrors.length > 0 && (
+          <Card className="mb-4 border-amber-500/30 bg-amber-500/10">
+            <CardContent className="p-4 text-sm text-amber-200">
+              Some sections may be incomplete. Try reloading the page.
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <StatCard
             title="Total Spent This Month"
@@ -217,7 +230,7 @@ async function DashboardContent({ month }: { month: string }) {
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await searchParams;
-  const month = params.month ?? getCurrentMonth();
+  const month = parseDashboardMonth(params.month ?? getCurrentMonth());
 
   return (
     <Suspense
