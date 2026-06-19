@@ -225,13 +225,13 @@ export function generateInsights(
     });
   }
 
-  const delivery = sumByCategory(spending, "Food Delivery");
-  const prevDelivery = sumByCategory(prevSpending, "Food Delivery");
+  const delivery = sumByCategory(spending, "Fast Food & Delivery");
+  const prevDelivery = sumByCategory(prevSpending, "Fast Food & Delivery");
   if (delivery > 0 && prevDelivery > 0) {
     const change = ((delivery - prevDelivery) / prevDelivery) * 100;
     insights.push({
       id: "delivery",
-      text: `Your food delivery spending is ${change >= 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% from last month.`,
+      text: `Your fast food & delivery spending is ${change >= 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% from last month.`,
       type: change > 20 ? "warning" : "info",
     });
   }
@@ -306,7 +306,7 @@ export function generateInsights(
     type: pace > totalSpent * 1.2 ? "warning" : "info",
   });
 
-  const fastFood = sumByCategory(spending, "Fast Food");
+  const fastFood = sumByCategory(spending, "Fast Food & Delivery");
   const coffee = sumByCategory(spending, "Coffee");
   if (fastFood + coffee > 0) {
     insights.push({

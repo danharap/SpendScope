@@ -1,6 +1,8 @@
 "use server";
 
 import { createClient, getUser } from "@/lib/supabase/server";
+import { recategorizeStoredTransaction } from "@/lib/categorization/engine";
+import { ensureDefaultCategories, getCategories } from "@/lib/actions/accounts";
 import type { NormalizedTransaction } from "@/types/transaction";
 import type { TransactionWithRelations, TransactionAnalyticsRow } from "@/types/database";
 import { getMonthRange } from "@/lib/utils/format";
@@ -286,10 +288,22 @@ export async function updateTransaction(
   const user = await getUser();
   if (!user) return { error: "Not authenticated" };
 
+  const payload = { ...updates };
+
+  if (updates.is_subscription === true) {
+    await ensureDefaultCategories();
+    const categories = await getCategories();
+    const subCat = categories.find((c) => c.name === "Subscriptions");
+    if (subCat) {
+      payload.category_id = subCat.id;
+      payload.needs_review = false;
+    }
+  }
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("transactions")
-    .update(updates)
+    .update(payload)
     .eq("id", id)
     .eq("user_id", user.id);
 
@@ -297,7 +311,133 @@ export async function updateTransaction(
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/transactions");
+  revalidatePath("/dashboard/insights");
   return { success: true };
+}
+
+const RECATEGORIZE_BATCH = 50;
+
+export async function recategorizeTransactions(options?: {
+  needsReviewOnly?: boolean;
+}) {
+  try {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
+
+    await ensureDefaultCategories();
+    const [categories, merchantRules] = await Promise.all([
+      getCategories(),
+      getMerchantRules(),
+    ]);
+
+    const subscriptionsCat = categories.find((c) => c.name === "Subscriptions");
+    const supabase = await createClient();
+
+    let updated = 0;
+    const pageSize = 500;
+    let from = 0;
+
+    while (true) {
+      let query = supabase
+        .from("transactions")
+        .select(
+          "id, description_raw, merchant_name, amount, is_subscription, is_transfer, is_income, needs_review, category_id"
+        )
+        .eq("user_id", user.id)
+        .order("transaction_date", { ascending: false })
+        .range(from, from + pageSize - 1);
+
+      if (options?.needsReviewOnly) {
+        query = query.eq("needs_review", true);
+      }
+
+      const { data, error } = await query;
+      if (error) return { error: error.message };
+      if (!data?.length) break;
+
+      const pending: {
+        id: string;
+        payload: Record<string, unknown>;
+      }[] = [];
+
+      for (const tx of data) {
+        const result = recategorizeStoredTransaction(
+          tx.description_raw,
+          tx.merchant_name,
+          Number(tx.amount),
+          categories,
+          merchantRules,
+          {
+            is_subscription: tx.is_subscription,
+            is_transfer: tx.is_transfer,
+            is_income: tx.is_income,
+          }
+        );
+
+        const payload: Record<string, unknown> = {};
+
+        if (tx.is_subscription && subscriptionsCat) {
+          if (tx.category_id !== subscriptionsCat.id) {
+            payload.category_id = subscriptionsCat.id;
+          }
+          if (tx.needs_review) payload.needs_review = false;
+          if (!tx.is_subscription) payload.is_subscription = true;
+        } else {
+          if (result.categoryId && result.categoryId !== tx.category_id) {
+            payload.category_id = result.categoryId;
+          }
+          if (result.needsReview !== tx.needs_review) {
+            payload.needs_review = result.needsReview;
+          }
+          if (result.isSubscription !== tx.is_subscription) {
+            payload.is_subscription = result.isSubscription;
+          }
+        }
+
+        if (Object.keys(payload).length > 0) {
+          pending.push({ id: tx.id, payload });
+        }
+      }
+
+      for (let i = 0; i < pending.length; i += RECATEGORIZE_BATCH) {
+        const batch = pending.slice(i, i + RECATEGORIZE_BATCH);
+        await Promise.all(
+          batch.map(({ id, payload }) =>
+            supabase
+              .from("transactions")
+              .update(payload)
+              .eq("id", id)
+              .eq("user_id", user.id)
+          )
+        );
+      }
+
+      updated += pending.length;
+
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    const { count: remaining } = await supabase
+      .from("transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("needs_review", true);
+
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/transactions");
+    revalidatePath("/dashboard/insights");
+
+    return {
+      success: true,
+      updated,
+      remaining: remaining ?? 0,
+    };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e.message : "Recategorization failed",
+    };
+  }
 }
 
 export async function deleteTransaction(id: string) {

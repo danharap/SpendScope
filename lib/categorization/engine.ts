@@ -1,10 +1,12 @@
 import type { Category, MerchantRule } from "@/types/database";
 import { normalizeDescription, extractMerchantName } from "@/lib/csv/dedupe";
 import {
-  MERCHANT_KEYWORD_RULES,
+  CATEGORY_KEYWORD_RULES,
+  HEURISTIC_CATEGORY_PATTERNS,
+  INCOME_KEYWORDS,
+  LEGACY_CATEGORY_ALIASES,
   SUBSCRIPTION_KEYWORDS,
   TRANSFER_KEYWORDS,
-  INCOME_KEYWORDS,
 } from "@/lib/categorization/rules";
 
 export interface CategorizationResult {
@@ -22,14 +24,99 @@ function findCategoryByName(
   categories: Category[],
   name: string
 ): Category | undefined {
+  const resolved = LEGACY_CATEGORY_ALIASES[name] ?? name;
   return categories.find(
-    (c) => c.name.toLowerCase() === name.toLowerCase()
+    (c) => c.name.toLowerCase() === resolved.toLowerCase()
   );
 }
 
-function matchKeywords(text: string, keywords: string[]): boolean {
-  const upper = text.toUpperCase();
-  return keywords.some((kw) => upper.includes(kw));
+function buildSearchTexts(description: string, merchant: string): string[] {
+  const combined = `${description} ${merchant}`.trim();
+  const upper = combined.toUpperCase();
+  const normalized = normalizeDescription(combined);
+  const spaced = upper.replace(/[^A-Z0-9]/g, " ").replace(/\s+/g, " ").trim();
+  const tight = upper.replace(/[^A-Z0-9]/g, "");
+  return [...new Set([normalized, upper, spaced, tight])];
+}
+
+function keywordMatches(texts: string[], keyword: string): boolean {
+  const kwUpper = keyword.toUpperCase();
+  const kwNorm = normalizeDescription(keyword);
+  const kwTight = kwUpper.replace(/[^A-Z0-9]/g, "");
+
+  return texts.some((text) => {
+    const textTight = text.replace(/\s/g, "");
+    return (
+      text.includes(kwNorm) ||
+      text.includes(kwUpper) ||
+      (kwTight.length >= 4 && textTight.includes(kwTight))
+    );
+  });
+}
+
+function matchKeywords(texts: string[], keywords: string[]): boolean {
+  return keywords.some((kw) => keywordMatches(texts, kw));
+}
+
+function matchHeuristicCategory(
+  texts: string[],
+  categories: Category[]
+): Category | undefined {
+  const haystack = texts.join(" ");
+  for (const { category, patterns } of HEURISTIC_CATEGORY_PATTERNS) {
+    if (patterns.some((pattern) => pattern.test(haystack))) {
+      const cat = findCategoryByName(categories, category);
+      if (cat) return cat;
+    }
+  }
+  return undefined;
+}
+
+function buildResult(
+  categories: Category[],
+  categoryName: string,
+  merchantName: string,
+  overrides: Partial<CategorizationResult> = {}
+): CategorizationResult {
+  const cat = findCategoryByName(categories, categoryName);
+  const isTransfer = categoryName === "Transfers";
+  const isSubscription =
+    overrides.isSubscription ??
+    (categoryName === "Subscriptions" ||
+      matchKeywords(
+        buildSearchTexts("", merchantName),
+        SUBSCRIPTION_KEYWORDS
+      ));
+
+  return {
+    categoryId: cat?.id ?? null,
+    categoryName: cat?.name ?? categoryName,
+    subcategory: overrides.subcategory ?? null,
+    merchantName,
+    isIncome: overrides.isIncome ?? false,
+    isTransfer: overrides.isTransfer ?? isTransfer,
+    isSubscription,
+    needsReview: overrides.needsReview ?? false,
+  };
+}
+
+function applySubscriptionOverride(
+  categories: Category[],
+  result: CategorizationResult,
+  searchTexts: string[]
+): CategorizationResult {
+  const isSub =
+    result.isSubscription || matchKeywords(searchTexts, SUBSCRIPTION_KEYWORDS);
+  if (!isSub) return result;
+
+  const subCat = findCategoryByName(categories, "Subscriptions");
+  return {
+    ...result,
+    categoryId: subCat?.id ?? result.categoryId,
+    categoryName: subCat?.name ?? "Subscriptions",
+    isSubscription: true,
+    needsReview: false,
+  };
 }
 
 export function categorizeTransaction(
@@ -37,123 +124,119 @@ export function categorizeTransaction(
   merchant: string,
   amount: number,
   categories: Category[],
-  merchantRules: MerchantRule[] = []
+  merchantRules: MerchantRule[] = [],
+  options?: { forceSubscription?: boolean }
 ): CategorizationResult {
-  const normalizedDesc = normalizeDescription(description);
   const merchantName = extractMerchantName(merchant || description);
-  const searchText = `${normalizedDesc} ${normalizeDescription(merchantName)}`;
+  const searchTexts = buildSearchTexts(description, merchantName);
 
   // Income & deposit detection (positive amounts)
   if (amount > 0) {
     const refundCat = findCategoryByName(categories, "Refunds");
     const incomeCat = findCategoryByName(categories, "Income");
     const isRefund =
-      searchText.includes("REFUND") || searchText.includes("REVERSAL");
+      searchTexts.some(
+        (t) => t.includes("REFUND") || t.includes("REVERSAL")
+      );
 
     if (isRefund) {
-      return {
-        categoryId: refundCat?.id ?? null,
-        categoryName: refundCat?.name ?? "Refunds",
-        subcategory: null,
-        merchantName,
+      return buildResult(categories, "Refunds", merchantName, {
         isIncome: false,
-        isTransfer: false,
-        isSubscription: false,
         needsReview: false,
-      };
+      });
     }
 
-    const isPayrollOrDeposit = matchKeywords(searchText, INCOME_KEYWORDS);
-    if (isPayrollOrDeposit) {
-      return {
-        categoryId: incomeCat?.id ?? null,
-        categoryName: incomeCat?.name ?? "Income",
-        subcategory: "Payroll / Deposit",
-        merchantName,
+    if (matchKeywords(searchTexts, INCOME_KEYWORDS)) {
+      return buildResult(categories, "Income", merchantName, {
         isIncome: true,
-        isTransfer: false,
-        isSubscription: false,
+        subcategory: "Payroll / Deposit",
         needsReview: false,
-      };
+      });
     }
 
-    const transferMatch = matchKeywords(searchText, TRANSFER_KEYWORDS);
-    if (transferMatch) {
-      const cat = findCategoryByName(categories, "Transfers");
-      return {
-        categoryId: cat?.id ?? null,
-        categoryName: cat?.name ?? "Transfers",
-        subcategory: null,
-        merchantName,
-        isIncome: false,
+    if (matchKeywords(searchTexts, TRANSFER_KEYWORDS)) {
+      return buildResult(categories, "Transfers", merchantName, {
         isTransfer: true,
-        isSubscription: false,
         needsReview: false,
-      };
+      });
     }
 
-    return {
-      categoryId: incomeCat?.id ?? null,
-      categoryName: incomeCat?.name ?? "Income",
-      subcategory: null,
-      merchantName,
+    return buildResult(categories, "Income", merchantName, {
       isIncome: true,
-      isTransfer: false,
-      isSubscription: false,
       needsReview: true,
-    };
+    });
   }
 
-  // User merchant rules (highest priority)
+  // User merchant rules (highest priority for spending)
   for (const rule of merchantRules) {
-    if (searchText.includes(rule.match_text.toUpperCase())) {
+    if (searchTexts.some((t) => t.includes(rule.match_text.toUpperCase()))) {
       const cat = categories.find((c) => c.id === rule.category_id);
-      return {
-        categoryId: rule.category_id,
-        categoryName: cat?.name ?? "Other",
+      const categoryName = cat?.name ?? "Other";
+      let result = buildResult(categories, categoryName, rule.merchant_name || merchantName, {
         subcategory: rule.subcategory,
-        merchantName: rule.merchant_name || merchantName,
-        isIncome: false,
-        isTransfer: cat?.name === "Transfers",
+        isTransfer: categoryName === "Transfers",
         isSubscription: rule.is_subscription,
         needsReview: false,
-      };
+      });
+      if (rule.is_subscription) {
+        result = applySubscriptionOverride(categories, result, searchTexts);
+      }
+      return result;
     }
+  }
+
+  if (options?.forceSubscription) {
+    return applySubscriptionOverride(
+      categories,
+      buildResult(categories, "Subscriptions", merchantName, {
+        isSubscription: true,
+        needsReview: false,
+      }),
+      searchTexts
+    );
   }
 
   // Transfer detection
-  if (matchKeywords(searchText, TRANSFER_KEYWORDS)) {
-    const cat = findCategoryByName(categories, "Transfers");
-    return {
-      categoryId: cat?.id ?? null,
-      categoryName: cat?.name ?? "Transfers",
-      subcategory: null,
-      merchantName,
-      isIncome: false,
+  if (matchKeywords(searchTexts, TRANSFER_KEYWORDS)) {
+    return buildResult(categories, "Transfers", merchantName, {
       isTransfer: true,
-      isSubscription: false,
       needsReview: false,
-    };
+    });
   }
 
-  // Keyword rules
-  for (const [categoryName, keywords] of Object.entries(MERCHANT_KEYWORD_RULES)) {
-    if (matchKeywords(searchText, keywords)) {
-      const cat = findCategoryByName(categories, categoryName);
-      const isSubscription =
-        categoryName === "Subscriptions" ||
-        matchKeywords(searchText, SUBSCRIPTION_KEYWORDS);
-      return {
-        categoryId: cat?.id ?? null,
-        categoryName,
-        subcategory: null,
-        merchantName,
-        isIncome: false,
-        isTransfer: categoryName === "Transfers",
-        isSubscription,
+  // Ordered keyword rules
+  for (const { category, keywords } of CATEGORY_KEYWORD_RULES) {
+    if (matchKeywords(searchTexts, keywords)) {
+      let result = buildResult(categories, category, merchantName, {
+        isTransfer: category === "Transfers",
+        isSubscription: category === "Subscriptions",
         needsReview: false,
-      };
+      });
+      result = applySubscriptionOverride(categories, result, searchTexts);
+      return result;
     }
+  }
+
+  // Heuristic fallbacks (grill, subs, lcbo-style patterns, etc.)
+  const heuristicCat = matchHeuristicCategory(searchTexts, categories);
+  if (heuristicCat) {
+    let result = buildResult(categories, heuristicCat.name, merchantName, {
+      needsReview: false,
+    });
+    result = applySubscriptionOverride(categories, result, searchTexts);
+    return result;
+  }
+
+  // Subscription keywords without a primary category match
+  if (matchKeywords(searchTexts, SUBSCRIPTION_KEYWORDS)) {
+    return applySubscriptionOverride(
+      categories,
+      buildResult(categories, "Subscriptions", merchantName, {
+        isSubscription: true,
+        needsReview: false,
+      }),
+      searchTexts
+    );
   }
 
   // Unknown — needs review
@@ -176,4 +259,54 @@ export function getCategoryName(
 ): string {
   if (!categoryId) return "Uncategorized";
   return categories.find((c) => c.id === categoryId)?.name ?? "Uncategorized";
+}
+
+/** Re-run categorization for an existing stored transaction row. */
+export function recategorizeStoredTransaction(
+  description: string,
+  merchant: string,
+  amount: number,
+  categories: Category[],
+  merchantRules: MerchantRule[],
+  existing: {
+    is_subscription?: boolean;
+    is_transfer?: boolean;
+    is_income?: boolean;
+  } = {}
+): CategorizationResult {
+  if (existing.is_transfer) {
+    return buildResult(categories, "Transfers", merchant, {
+      isTransfer: true,
+      needsReview: false,
+    });
+  }
+
+  if (existing.is_income) {
+    return categorizeTransaction(
+      description,
+      merchant,
+      Math.abs(amount),
+      categories,
+      merchantRules
+    );
+  }
+
+  const result = categorizeTransaction(
+    description,
+    merchant,
+    amount,
+    categories,
+    merchantRules,
+    { forceSubscription: existing.is_subscription === true }
+  );
+
+  if (existing.is_subscription) {
+    return applySubscriptionOverride(
+      categories,
+      { ...result, isSubscription: true },
+      buildSearchTexts(description, merchant)
+    );
+  }
+
+  return result;
 }

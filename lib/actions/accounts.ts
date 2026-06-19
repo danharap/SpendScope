@@ -1,7 +1,10 @@
 "use server";
 
 import { createClient, getUser } from "@/lib/supabase/server";
-import { DEFAULT_CATEGORIES } from "@/lib/constants";
+import {
+  DEFAULT_CATEGORIES,
+  MERGED_LEGACY_CATEGORIES,
+} from "@/lib/constants";
 import { revalidatePath } from "next/cache";
 
 export async function ensureProfile() {
@@ -23,18 +26,51 @@ export async function ensureProfile() {
   }
 }
 
-export async function ensureDefaultCategories() {
-  const user = await getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const supabase = await createClient();
-
-  const { count } = await supabase
+async function mergeLegacyDefaultCategories(
+  supabase: Awaited<ReturnType<typeof createClient>>
+) {
+  const { data: defaults } = await supabase
     .from("categories")
-    .select("*", { count: "exact", head: true })
+    .select("id, name")
     .eq("is_default", true);
 
-  if ((count ?? 0) === 0) {
+  if (!defaults?.length) return;
+
+  for (const [legacyName, targetName] of Object.entries(
+    MERGED_LEGACY_CATEGORIES
+  )) {
+    const source = defaults.find((c) => c.name === legacyName);
+    const target = defaults.find((c) => c.name === targetName);
+    if (!source || !target || source.id === target.id) continue;
+
+    await supabase
+      .from("transactions")
+      .update({ category_id: target.id })
+      .eq("category_id", source.id);
+
+    await supabase
+      .from("budgets")
+      .update({ category_id: target.id })
+      .eq("category_id", source.id);
+
+    await supabase
+      .from("merchant_rules")
+      .update({ category_id: target.id })
+      .eq("category_id", source.id);
+  }
+}
+
+export async function ensureDefaultCategories() {
+  const supabase = await createClient();
+
+  const { data: existingDefaults } = await supabase
+    .from("categories")
+    .select("name")
+    .eq("is_default", true);
+
+  const existingNames = new Set(existingDefaults?.map((c) => c.name) ?? []);
+
+  if (existingNames.size === 0) {
     await supabase.from("categories").insert(
       DEFAULT_CATEGORIES.map((c) => ({
         name: c.name,
@@ -44,7 +80,22 @@ export async function ensureDefaultCategories() {
         user_id: null,
       }))
     );
+  } else {
+    const missing = DEFAULT_CATEGORIES.filter((c) => !existingNames.has(c.name));
+    if (missing.length > 0) {
+      await supabase.from("categories").insert(
+        missing.map((c) => ({
+          name: c.name,
+          color: c.color,
+          icon: c.icon,
+          is_default: true,
+          user_id: null,
+        }))
+      );
+    }
   }
+
+  await mergeLegacyDefaultCategories(supabase);
 
   return { success: true };
 }

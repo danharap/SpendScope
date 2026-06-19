@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
+import { RecategorizeButton } from "@/components/transactions/recategorize-button";
 
 interface NeedsReviewCardProps {
   count: number;
@@ -21,18 +22,22 @@ export function NeedsReviewCard({ count }: NeedsReviewCardProps) {
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm leading-relaxed opacity-90">
           {count} transaction{count !== 1 ? "s" : ""} could not be automatically
-          categorized. Review and assign categories to keep your dashboard accurate.
+          categorized. Run auto-categorize to apply improved rules, then review
+          anything still unmatched.
         </p>
-        <Link
-          href="/dashboard/transactions?needsReview=true"
-          className={buttonVariants({
-            size: "sm",
-            variant: "outline",
-            className: "shrink-0 border-current/30 bg-card/50 hover:bg-card",
-          })}
-        >
-          Review now
-        </Link>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <RecategorizeButton needsReviewOnly variant="default" size="sm" />
+          <Link
+            href="/dashboard/transactions?needsReview=true"
+            className={buttonVariants({
+              size: "sm",
+              variant: "outline",
+              className: "border-current/30 bg-card/50 hover:bg-card",
+            })}
+          >
+            Review manually
+          </Link>
+        </div>
       </CardContent>
     </Card>
   );
