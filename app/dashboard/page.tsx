@@ -274,26 +274,26 @@ async function DashboardContent({ month }: { month: string }) {
             <StatCard
               title="Total Spent This Month"
               value={formatCAD(totalSpent)}
-              icon={DollarSign}
+              icon={<DollarSign className="h-5 w-5" aria-hidden />}
             />
             <StatCard
               title="Food & Dining"
               value={formatCAD(foodSpent)}
-              icon={Utensils}
+              icon={<Utensils className="h-5 w-5" aria-hidden />}
               variant="warning"
               subtitle="Restaurants, fast food, groceries"
             />
             <StatCard
               title="Budget Remaining"
               value={formatCAD(budgetRemaining)}
-              icon={Wallet}
+              icon={<Wallet className="h-5 w-5" aria-hidden />}
               variant="success"
               subtitle={budgets.length > 0 ? `Across ${budgets.length} budget${budgets.length !== 1 ? "s" : ""}` : "No budgets set"}
             />
             <StatCard
               title="Needs Review"
               value={String(needsReviewCount)}
-              icon={AlertCircle}
+              icon={<AlertCircle className="h-5 w-5" aria-hidden />}
               variant={needsReviewCount > 0 ? "warning" : "default"}
               subtitle={needsReviewCount > 0 ? "Uncategorized transactions" : "All categorized"}
             />

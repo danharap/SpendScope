@@ -3,14 +3,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { HoverLift } from "@/components/design/animated";
-import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 interface StatCardProps {
   title: string;
   value: string;
   subtitle?: string;
-  icon: LucideIcon;
+  /** Pass a pre-rendered element, e.g. <DollarSign className="h-5 w-5" /> */
+  icon: ReactNode;
   trend?: { value: string; positive?: boolean };
   variant?: "default" | "success" | "warning" | "danger";
   index?: number;
@@ -27,7 +28,7 @@ export function StatCard({
   title,
   value,
   subtitle,
-  icon: Icon,
+  icon,
   trend,
   variant = "default",
 }: StatCardProps) {
@@ -44,7 +45,7 @@ export function StatCard({
               variantStyles[variant]
             )}
           >
-            <Icon className="h-5 w-5" aria-hidden />
+            {icon}
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
