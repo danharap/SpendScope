@@ -1,45 +1,58 @@
 import { Suspense } from "react";
+import { format } from "date-fns";
+import { createClient, getUser } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/layout/dashboard-header";
 import { StatCard } from "@/components/dashboard/stat-card";
-import { NeedsReviewCard } from "@/components/dashboard/needs-review-card";
-import { SubscriptionsSummaryCard } from "@/components/dashboard/subscriptions-summary-card";
 import { BudgetOverview } from "@/components/dashboard/budget-overview";
 import { SpendingByCategoryChart } from "@/components/charts/spending-by-category-chart";
-import { MonthlySpendingChart } from "@/components/charts/monthly-spending-chart";
-import { FoodSpendingTrendChart } from "@/components/charts/food-spending-trend-chart";
-import { TopMerchantsChart } from "@/components/charts/top-merchants-chart";
 import { TransactionsTable } from "@/components/transactions/transactions-table";
 import { PageContainer } from "@/components/design/page-container";
 import { EmptyState } from "@/components/design/empty-state";
 import { SectionHeader } from "@/components/design/section-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
-import {
-  DollarSign,
-  Utensils,
-  Wallet,
-  AlertCircle,
-  Upload,
-  Repeat,
-  Store,
-} from "lucide-react";
-import { getCategories } from "@/lib/actions/accounts";
-import {
-  getDashboardStats,
-  getDashboardBudgets,
-  getDashboardBudgetPrefs,
-  getRecentTransactionsForDashboard,
-  getDistinctMonthsForDashboard,
-} from "@/lib/actions/dashboard";
-import { computeBudgetRemaining, getCurrentMonth } from "@/lib/analytics/dashboard";
-import { IncomeSpendingOverview } from "@/components/dashboard/income-spending-overview";
-import { formatCurrency, formatPercent, parseDashboardMonth } from "@/lib/utils/format";
-import { getWeekRange } from "@/lib/analytics/income-budget";
-import type { IncomeSpendingStats } from "@/lib/analytics/income-budget";
+import { DollarSign, Utensils, Wallet, AlertCircle, Upload } from "lucide-react";
+import type { Category, BudgetWithSpending, TransactionWithRelations } from "@/types/database";
 
-export const maxDuration = 60;
+// ---------------------------------------------------------------------------
+// Helpers (inlined so this page has no external analytics dependencies)
+// ---------------------------------------------------------------------------
+
+function getCurrentMonth(): string {
+  return format(new Date(), "yyyy-MM");
+}
+
+function parseSafeMonth(month?: string | null): string {
+  const cur = getCurrentMonth();
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) return cur;
+  const mo = Number(month.split("-")[1]);
+  if (!mo || mo < 1 || mo > 12) return cur;
+  return month;
+}
+
+function getMonthRange(month: string): { start: string; end: string } {
+  const [year, m] = month.split("-").map(Number);
+  const start = new Date(year, m - 1, 1);
+  const end = new Date(year, m, 0);
+  return {
+    start: format(start, "yyyy-MM-dd"),
+    end: format(end, "yyyy-MM-dd"),
+  };
+}
+
+function formatCAD(amount: number): string {
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
 interface DashboardPageProps {
   searchParams: Promise<{ month?: string }>;
@@ -47,16 +60,294 @@ interface DashboardPageProps {
 
 async function DashboardContent({ month }: { month: string }) {
   try {
-    return await DashboardContentInner({ month });
+    const user = await getUser();
+    if (!user) {
+      return (
+        <PageContainer>
+          <EmptyState
+            icon={Upload}
+            title="Not signed in"
+            description="Please sign in to view your dashboard."
+          />
+        </PageContainer>
+      );
+    }
+
+    const supabase = await createClient();
+    const { start, end } = getMonthRange(month);
+
+    // Fetch all data in parallel; use allSettled so one failure doesn't block others
+    const [catRes, monthsRes, txRes, needsReviewRes, budgetsRes] =
+      await Promise.allSettled([
+        supabase
+          .from("categories")
+          .select("*")
+          .or(`is_default.eq.true,user_id.eq.${user.id}`)
+          .order("name"),
+
+        supabase
+          .from("transactions")
+          .select("transaction_date")
+          .eq("user_id", user.id)
+          .order("transaction_date"),
+
+        supabase
+          .from("transactions")
+          .select("amount, category_id, is_income, is_transfer")
+          .eq("user_id", user.id)
+          .gte("transaction_date", start)
+          .lte("transaction_date", end),
+
+        supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("needs_review", true),
+
+        supabase
+          .from("budgets")
+          .select("*, categories(*)")
+          .eq("user_id", user.id)
+          .eq("month", month),
+      ]);
+
+    const categories: Category[] =
+      catRes.status === "fulfilled" ? ((catRes.value.data ?? []) as Category[]) : [];
+
+    const allMonths: string[] =
+      monthsRes.status === "fulfilled"
+        ? [
+            ...new Set(
+              (monthsRes.value.data ?? []).map((t) => t.transaction_date.slice(0, 7))
+            ),
+          ].sort()
+        : [];
+
+    const txRows =
+      txRes.status === "fulfilled" ? (txRes.value.data ?? []) : [];
+
+    const needsReviewCount =
+      needsReviewRes.status === "fulfilled"
+        ? (needsReviewRes.value.count ?? 0)
+        : 0;
+
+    const rawBudgets =
+      budgetsRes.status === "fulfilled" ? (budgetsRes.value.data ?? []) : [];
+
+    // -------------------------------------------------------------------------
+    // Compute spending stats
+    // -------------------------------------------------------------------------
+    const spending = txRows.filter(
+      (t) => !t.is_income && !t.is_transfer && Number(t.amount) < 0
+    );
+    const totalSpent = spending.reduce(
+      (s, t) => s + Math.abs(Number(t.amount)),
+      0
+    );
+
+    const catMap = new Map(categories.map((c) => [c.id, c]));
+    const foodNames = [
+      "Restaurants",
+      "Fast Food & Delivery",
+      "Coffee",
+      "Groceries",
+      "Alcohol & Beverages",
+    ];
+    const foodCatIds = new Set(
+      categories.filter((c) => foodNames.includes(c.name)).map((c) => c.id)
+    );
+    const foodSpent = spending
+      .filter((t) => t.category_id && foodCatIds.has(t.category_id))
+      .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+
+    // Category totals for chart
+    const catTotals: Record<string, { total: number; color: string }> = {};
+    for (const t of spending) {
+      const cat = t.category_id ? catMap.get(t.category_id) : undefined;
+      const name = cat?.name ?? "Other";
+      const color = cat?.color ?? "#94a3b8";
+      if (!catTotals[name]) catTotals[name] = { total: 0, color };
+      catTotals[name].total += Math.abs(Number(t.amount));
+    }
+    const spendingByCategory = Object.entries(catTotals)
+      .map(([name, { total, color }]) => ({ name, total, color }))
+      .sort((a, b) => b.total - a.total);
+
+    // -------------------------------------------------------------------------
+    // Budget remaining
+    // -------------------------------------------------------------------------
+    let budgets: BudgetWithSpending[] = [];
+    if (rawBudgets.length > 0) {
+      const budgetCatIds = rawBudgets.map((b) => b.category_id);
+      const { data: budgetTx } = await supabase
+        .from("transactions")
+        .select("category_id, amount")
+        .eq("user_id", user.id)
+        .in("category_id", budgetCatIds)
+        .gte("transaction_date", start)
+        .lte("transaction_date", end)
+        .eq("is_income", false)
+        .eq("is_transfer", false);
+
+      const spentByCat: Record<string, number> = {};
+      for (const tx of budgetTx ?? []) {
+        if (!tx.category_id) continue;
+        spentByCat[tx.category_id] =
+          (spentByCat[tx.category_id] ?? 0) + Math.abs(Number(tx.amount));
+      }
+
+      budgets = rawBudgets.map((b) => {
+        const spent = spentByCat[b.category_id] ?? 0;
+        const limit = Number(b.limit_amount);
+        return {
+          ...b,
+          spent,
+          remaining: limit - spent,
+          percentUsed: limit > 0 ? (spent / limit) * 100 : 0,
+        };
+      }) as BudgetWithSpending[];
+    }
+
+    const budgetRemaining = budgets.reduce(
+      (s, b) => s + Math.max(0, b.remaining),
+      0
+    );
+
+    // -------------------------------------------------------------------------
+    // Recent transactions (with relations for the table)
+    // -------------------------------------------------------------------------
+    const { data: recentData } = await supabase
+      .from("transactions")
+      .select("*, accounts(*), categories(*)")
+      .eq("user_id", user.id)
+      .gte("transaction_date", start)
+      .lte("transaction_date", end)
+      .order("transaction_date", { ascending: false })
+      .limit(10);
+    const recentTransactions = (recentData ?? []) as TransactionWithRelations[];
+
+    // -------------------------------------------------------------------------
+    // Month list for header selector
+    // -------------------------------------------------------------------------
+    const displayMonths = [...new Set([...allMonths, month])].sort();
+    const hasData =
+      displayMonths.length > 1 ||
+      recentTransactions.length > 0 ||
+      totalSpent > 0;
+
+    if (!hasData) {
+      return (
+        <>
+          <DashboardHeader
+            title="Spending Dashboard"
+            description="Track your spending, budgets, and monthly habits from uploaded CSV transactions."
+            showMonthSelector={false}
+            months={[]}
+            showCsvBadge
+            showUploadButton
+          />
+          <PageContainer>
+            <EmptyState
+              icon={Upload}
+              title="No transactions yet"
+              description="Upload your first CSV file to start tracking your spending, categories, and budgets."
+              actionLabel="Upload CSV"
+              actionHref="/dashboard/upload"
+            />
+          </PageContainer>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <DashboardHeader
+          title="Spending Dashboard"
+          description="Track your spending, budgets, and monthly habits from uploaded CSV transactions."
+          months={displayMonths}
+          showCsvBadge
+          showUploadButton
+        />
+        <PageContainer>
+          {/* Top stats */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Total Spent This Month"
+              value={formatCAD(totalSpent)}
+              icon={DollarSign}
+            />
+            <StatCard
+              title="Food & Dining"
+              value={formatCAD(foodSpent)}
+              icon={Utensils}
+              variant="warning"
+              subtitle="Restaurants, fast food, groceries"
+            />
+            <StatCard
+              title="Budget Remaining"
+              value={formatCAD(budgetRemaining)}
+              icon={Wallet}
+              variant="success"
+              subtitle={budgets.length > 0 ? `Across ${budgets.length} budget${budgets.length !== 1 ? "s" : ""}` : "No budgets set"}
+            />
+            <StatCard
+              title="Needs Review"
+              value={String(needsReviewCount)}
+              icon={AlertCircle}
+              variant={needsReviewCount > 0 ? "warning" : "default"}
+              subtitle={needsReviewCount > 0 ? "Uncategorized transactions" : "All categorized"}
+            />
+          </div>
+
+          {/* Budgets */}
+          <BudgetOverview budgets={budgets} month={month} />
+
+          {/* Spending by category */}
+          {spendingByCategory.length > 0 && (
+            <SpendingByCategoryChart data={spendingByCategory} />
+          )}
+
+          {/* Recent transactions */}
+          <Card className="card-premium overflow-hidden">
+            <SectionHeader
+              title="Recent transactions"
+              description="Latest activity from your uploaded CSV files"
+              className="border-b border-border/60 px-6 py-5"
+              action={
+                <Link
+                  href="/dashboard/transactions"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  View all
+                </Link>
+              }
+            />
+            <CardContent className="p-0">
+              <TransactionsTable
+                transactions={recentTransactions}
+                categories={categories}
+                compact
+              />
+            </CardContent>
+          </Card>
+        </PageContainer>
+      </>
+    );
   } catch (err) {
-    console.error("[dashboard] DashboardContent threw:", err);
+    console.error("[dashboard] fatal render error:", err);
     return (
       <PageContainer>
         <Card className="border-rose-500/30 bg-rose-500/10">
-          <CardContent className="p-6 text-center">
-            <p className="font-semibold text-rose-300">Dashboard failed to load.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {err instanceof Error ? err.message : "Unknown error"}
+          <CardContent className="p-6">
+            <p className="font-semibold text-rose-300">Dashboard error</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {err instanceof Error ? err.message : "An unknown error occurred."}
+            </p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Your transactions and other pages are unaffected.{" "}
+              <Link href="/dashboard/transactions" className="underline">
+                View transactions →
+              </Link>
             </p>
           </CardContent>
         </Card>
@@ -65,230 +356,23 @@ async function DashboardContent({ month }: { month: string }) {
   }
 }
 
-async function DashboardContentInner({ month }: { month: string }) {
-  const [categories, months, budgets, budgetPrefs, recentTransactions] =
-    await Promise.all([
-      getCategories().catch(() => [] as Awaited<ReturnType<typeof getCategories>>),
-      getDistinctMonthsForDashboard().catch(() => [] as string[]),
-      getDashboardBudgets(month).catch(() => [] as Awaited<ReturnType<typeof getDashboardBudgets>>),
-      getDashboardBudgetPrefs().catch(() => ({
-        weeklySpendingLimit: 200,
-        hourlyRate: 30,
-        hoursPerWeek: 40,
-        payFrequency: "biweekly" as const,
-      })),
-      getRecentTransactionsForDashboard(month).catch(
-        () => [] as Awaited<ReturnType<typeof getRecentTransactionsForDashboard>>
-      ),
-    ]);
-
-  const stats = await getDashboardStats(month, categories).catch(() => ({
-    totalSpent: 0,
-    prevMonthSpent: 0,
-    monthOverMonthChange: 0,
-    foodSpent: 0,
-    groceriesSpent: 0,
-    subscriptionsSpent: 0,
-    needsReviewCount: 0,
-    topMerchants: [] as { name: string; total: number }[],
-    spendingByCategory: [] as { name: string; total: number; color: string }[],
-    monthlySpending: [] as { month: string; total: number }[],
-    foodTrend: [] as { month: string; total: number }[],
-    subscriptionItems: [] as { name: string; total: number; count: number }[],
-    weeklySpent: 0,
-    prevWeekSpent: 0,
-    monthIncome: 0,
-    incomeDeposits: [] as { date: string; amount: number; merchant: string }[],
-  }));
-
-  const budgetRemaining = computeBudgetRemaining(budgets);
-  const weekLabel = getWeekRange().label;
-
-  const allMonths = [...months];
-  if (!allMonths.includes(month)) allMonths.push(month);
-  allMonths.sort();
-
-  const weeklyLimit = budgetPrefs.weeklySpendingLimit;
-  const weeklyRemaining = weeklyLimit - stats.weeklySpent;
-  const weekOverWeekChange =
-    stats.prevWeekSpent > 0
-      ? ((stats.weeklySpent - stats.prevWeekSpent) / stats.prevWeekSpent) * 100
-      : 0;
-
-  const estimatedPayPerPeriod = (() => {
-    const gross = budgetPrefs.hourlyRate * budgetPrefs.hoursPerWeek;
-    const net = gross * 0.75;
-    if (budgetPrefs.payFrequency === "weekly") return net;
-    if (budgetPrefs.payFrequency === "monthly") return net * (52 / 12);
-    return net * 2;
-  })();
-
-  const incomeStats: IncomeSpendingStats = {
-    weeklySpent: stats.weeklySpent,
-    weeklyLimit,
-    weeklyRemaining,
-    weeklyPercentUsed: weeklyLimit > 0 ? (stats.weeklySpent / weeklyLimit) * 100 : 0,
-    weeklyOverBudget: stats.weeklySpent > weeklyLimit,
-    prevWeekSpent: stats.prevWeekSpent,
-    weekOverWeekChange,
-    monthIncome: stats.monthIncome,
-    monthSpending: stats.totalSpent,
-    monthNet: stats.monthIncome - stats.totalSpent,
-    estimatedPayPerPeriod,
-    estimatedMonthlyIncome: estimatedPayPerPeriod * (budgetPrefs.payFrequency === "biweekly" ? 26 / 12 : 1),
-    incomeDeposits: stats.incomeDeposits,
-    suggestions: [],
-  };
-
-  const topMerchant = stats.topMerchants[0];
-  const hasData = allMonths.length > 1 || recentTransactions.length > 0 || stats.totalSpent > 0 || stats.needsReviewCount > 0;
-
-  if (!hasData) {
-    return (
-      <>
-        <DashboardHeader
-          title="Spending Dashboard"
-          description="Track your spending, budgets, and monthly habits from uploaded CSV transactions."
-          showMonthSelector={false}
-          months={[]}
-          showCsvBadge
-          showUploadButton
-        />
-        <PageContainer>
-          <EmptyState
-            icon={Upload}
-            title="No transactions yet"
-            description="Upload your first RBC CSV file to start tracking your spending, categories, and budgets."
-            actionLabel="Upload CSV"
-            actionHref="/dashboard/upload"
-          />
-        </PageContainer>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <DashboardHeader
-        title="Spending Dashboard"
-        description="Track your spending, budgets, and monthly habits from uploaded CSV transactions."
-        months={allMonths}
-        showCsvBadge
-        showUploadButton
-      />
-      <PageContainer>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-          <StatCard
-            title="Total Spent This Month"
-            value={formatCurrency(stats.totalSpent)}
-            icon={DollarSign}
-            trend={{
-              value: formatPercent(stats.monthOverMonthChange),
-              positive: stats.monthOverMonthChange <= 0,
-            }}
-            subtitle="vs last month"
-          />
-          <StatCard
-            title="Food & Dining"
-            value={formatCurrency(stats.foodSpent)}
-            icon={Utensils}
-            variant="warning"
-            subtitle={`Groceries: ${formatCurrency(stats.groceriesSpent)}`}
-          />
-          <StatCard
-            title="Budget Remaining"
-            value={formatCurrency(budgetRemaining)}
-            icon={Wallet}
-            variant="success"
-          />
-          <StatCard
-            title="Needs Review"
-            value={String(stats.needsReviewCount)}
-            icon={AlertCircle}
-            variant={stats.needsReviewCount > 0 ? "warning" : "default"}
-            subtitle={stats.needsReviewCount > 0 ? "Uncategorized" : "All categorized"}
-          />
-          <StatCard
-            title="Subscriptions"
-            value={formatCurrency(stats.subscriptionsSpent)}
-            icon={Repeat}
-            subtitle={`${stats.subscriptionItems.length} active`}
-          />
-          <StatCard
-            title="Top Merchant"
-            value={topMerchant ? formatCurrency(topMerchant.total) : "—"}
-            icon={Store}
-            subtitle={topMerchant?.name ?? "No merchants yet"}
-          />
-        </div>
-
-        <IncomeSpendingOverview stats={incomeStats} weekLabel={weekLabel} />
-
-        <NeedsReviewCard count={stats.needsReviewCount} />
-
-        <BudgetOverview budgets={budgets} month={month} />
-
-        <SectionHeader
-          title="Spending analytics"
-          description="Visual breakdown of your monthly habits"
-        />
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <SpendingByCategoryChart data={stats.spendingByCategory} />
-          <SubscriptionsSummaryCard
-            items={stats.subscriptionItems}
-            total={stats.subscriptionsSpent}
-          />
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <MonthlySpendingChart data={stats.monthlySpending} />
-          <FoodSpendingTrendChart data={stats.foodTrend} />
-        </div>
-
-        <TopMerchantsChart data={stats.topMerchants} />
-
-        <Card className="card-premium overflow-hidden">
-          <SectionHeader
-            title="Recent transactions"
-            description="Latest activity from your uploaded CSV files"
-            className="border-b border-border/60 px-6 py-5"
-            action={
-              <Link
-                href="/dashboard/transactions"
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                View all
-              </Link>
-            }
-          />
-          <CardContent className="p-0">
-            <TransactionsTable
-              transactions={recentTransactions}
-              categories={categories}
-              compact
-            />
-          </CardContent>
-        </Card>
-      </PageContainer>
-    </>
-  );
-}
-
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   const params = await searchParams;
-  const month = parseDashboardMonth(params.month ?? getCurrentMonth());
+  const month = parseSafeMonth(params.month);
 
   return (
     <Suspense
       fallback={
         <PageContainer>
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-36 rounded-2xl" />
             ))}
           </div>
+          <Skeleton className="h-48 rounded-2xl" />
+          <Skeleton className="h-64 rounded-2xl" />
         </PageContainer>
       }
     >
