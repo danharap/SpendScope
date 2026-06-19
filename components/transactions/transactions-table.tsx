@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useOptimistic } from "react";
 import {
   Table,
   TableBody,
@@ -42,6 +42,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
 
+// Per-row optimistic overrides so each row updates instantly without
+// blocking other rows from being edited simultaneously.
+type RowOverride = { categoryId?: string | null; needsReview?: boolean };
+type OverrideMap = Record<string, RowOverride>;
+
 interface TransactionsTableProps {
   transactions: TransactionWithRelations[];
   categories: Category[];
@@ -61,20 +66,30 @@ export function TransactionsTable({
   categories,
   compact = false,
 }: TransactionsTableProps) {
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [noteDialog, setNoteDialog] = useState<{
     id: string;
     notes: string;
   } | null>(null);
 
+  // Optimistic overrides keyed by transaction id — applied instantly so
+  // the user sees the change before the server round-trip completes.
+  const [optimistic, setOptimistic] = useOptimistic<OverrideMap, { id: string; patch: RowOverride }>(
+    {},
+    (state, { id, patch }) => ({ ...state, [id]: { ...state[id], ...patch } })
+  );
+
   const handleCategoryChange = (id: string, categoryId: string) => {
     startTransition(async () => {
+      // Instant UI feedback — update category and clear the review badge now
+      setOptimistic({ id, patch: { categoryId, needsReview: false } });
+
       const result = await updateTransaction(id, {
         category_id: categoryId,
         needs_review: false,
       });
       if (result.error) toast.error(result.error);
-      else toast.success("Category updated");
+      // No success toast — the instant visual change is feedback enough
     });
   };
 
@@ -162,6 +177,12 @@ export function TransactionsTable({
           </TableHeader>
           <TableBody>
             {transactions.map((tx) => {
+              const override = optimistic[tx.id];
+              const displayCategoryId =
+                override?.categoryId !== undefined ? override.categoryId : tx.category_id;
+              const displayNeedsReview =
+                override?.needsReview !== undefined ? override.needsReview : tx.needs_review;
+
               const amount = Number(tx.amount);
               const isExpense = amount < 0;
               return (
@@ -169,7 +190,7 @@ export function TransactionsTable({
                   key={tx.id}
                   className={cn(
                     "group transition-colors",
-                    tx.needs_review && "bg-amber-500/5"
+                    displayNeedsReview && "bg-amber-500/5"
                   )}
                 >
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
@@ -186,9 +207,8 @@ export function TransactionsTable({
                   <TableCell>
                     <CategorySelect
                       categories={categories}
-                      value={tx.category_id}
+                      value={displayCategoryId}
                       onChange={(catId) => handleCategoryChange(tx.id, catId)}
-                      disabled={pending}
                     />
                   </TableCell>
                   <TableCell
@@ -208,7 +228,7 @@ export function TransactionsTable({
                   )}
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
-                      {tx.needs_review && (
+                      {displayNeedsReview && (
                         <StatusBadge variant="review">Review</StatusBadge>
                       )}
                       {tx.is_subscription && (
@@ -310,7 +330,7 @@ export function TransactionsTable({
             <Button variant="outline" onClick={() => setNoteDialog(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveNote} disabled={pending}>
+            <Button onClick={handleSaveNote}>
               Save
             </Button>
           </DialogFooter>
